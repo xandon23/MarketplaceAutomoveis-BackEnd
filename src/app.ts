@@ -1,14 +1,10 @@
-import express, { Router, Request, Response } from "express";
+import express from "express";
+import userRoutes from "./routes/UserRoutes";
 
 const app = express();
-app.use(express.json());
+app.use(express.json()); // Permite receber JSON do Front-end
 
-const router: Router = Router();
-
-router.get("/", (req: Request, res: Response) => {
-  res.send("Hello MUNDO!");
-});
-
-app.use(router);
+// Configurando o endereço base para usuários
+app.use("/users", userRoutes);
 
 export default app;
