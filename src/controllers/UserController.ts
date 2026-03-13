@@ -5,15 +5,32 @@ export default class UserController {
   // POST: Criar um novo utilizador
   static async create(req: Request, res: Response): Promise<Response> {
     try {
-      const newUser = await User.create(req.body);
+      const { birthDate } = req.body;
 
-      // Retornamos 201 (Created) e não devolvemos a senha por segurança
-      return res.status(201).json({
-        message: "Usuário cadastrado com sucesso!",
-        id: newUser.id,
-      });
+      // --- REGRA DE NEGÓCIO: Validação de Maioridade ---
+      if (birthDate) {
+        const dob = new Date(birthDate);
+        const ageDifMs = Date.now() - dob.getTime();
+        const ageDate = new Date(ageDifMs);
+        const age = Math.abs(ageDate.getUTCFullYear() - 1970); // Truque limpo para calcular a idade exata
+
+        if (age < 18) {
+          return res.status(403).json({
+            error:
+              "Acesso negado: É necessário ter 18 anos ou mais para criar uma conta e negociar.",
+          });
+        }
+      }
+      // ------------------------------------------------
+
+      const newUser = await User.create(req.body);
+      const userWithoutPassword = newUser.toJSON();
+      delete (userWithoutPassword as any).password;
+
+      return res
+        .status(201)
+        .json({ message: "Utilizador criado!", user: userWithoutPassword });
     } catch (error: any) {
-      // Retornamos 400 (Bad Request) se der erro de validação (CPF, Senha, etc)
       return res.status(400).json({ error: error.message });
     }
   }

@@ -10,6 +10,8 @@ import {
 } from "sequelize-typescript";
 import bcrypt from "bcrypt";
 import Vehicle from "./Vehicle";
+import Proposal from "./Proposal";
+import Review from "./Review";
 
 @Table({
   tableName: "users",
@@ -41,6 +43,12 @@ export default class User extends Model {
     },
   })
   email!: string;
+
+  @Column({ type: DataType.STRING, allowNull: false })
+  declare phone: string;
+
+  @Column({ type: DataType.DATEONLY, allowNull: false })
+  declare birthDate: string; // Formato esperado: YYYY-MM-DD
 
   @Unique
   @Column({
@@ -95,4 +103,16 @@ export default class User extends Model {
 
   @HasMany(() => Vehicle)
   vehicles!: Vehicle[];
+
+  // Um usuário pode fazer várias propostas
+  @HasMany(() => Proposal, "buyerId")
+  declare proposals: Proposal[];
+
+  // Avaliações que o usuário FEZ para outras pessoas
+  @HasMany(() => Review, "reviewerId")
+  declare givenReviews: Review[];
+
+  // Avaliações que o usuário RECEBEU de outras pessoas
+  @HasMany(() => Review, "reviewedId")
+  declare receivedReviews: Review[];
 }

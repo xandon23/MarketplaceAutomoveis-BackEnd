@@ -9,6 +9,7 @@ import {
 } from "sequelize-typescript";
 import User from "./User";
 import VehicleImage from "./VehicleImage";
+import Proposal from "./Proposal";
 
 @Table({
   tableName: "vehicles",
@@ -21,6 +22,9 @@ export default class Vehicle extends Model {
     primaryKey: true,
   })
   declare id: string;
+
+  @Column({ type: DataType.STRING, allowNull: false })
+  declare location: string; // Ex: "Campo Mourão - PR"
 
   @Column({ type: DataType.STRING, allowNull: false })
   declare brand: string;
@@ -65,4 +69,8 @@ export default class Vehicle extends Model {
 
   @HasMany(() => VehicleImage)
   declare images: VehicleImage[];
+
+  // Um veículo pode receber várias propostas de compra
+  @HasMany(() => Proposal, "targetVehicleId")
+  declare receivedProposals: Proposal[];
 }
