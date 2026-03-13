@@ -3,7 +3,10 @@ import UserController from "../controllers/UserController";
 
 const router = Router();
 
-// Quando o Front-end fizer um POST para esta rota, chamamos o Controller
-router.post("/", UserController.create);
+router.post("/", UserController.create); // Criar
+router.get("/", UserController.getAll); // Listar todos
+router.get("/:id", UserController.getById); // Buscar por ID
+router.put("/:id", UserController.update); // Atualizar por ID
+router.delete("/:id", UserController.delete); // Eliminar por ID
 
 export default router;

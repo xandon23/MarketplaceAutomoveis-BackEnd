@@ -6,8 +6,10 @@ import {
   IsEmail,
   Unique,
   BeforeSave,
+  HasMany,
 } from "sequelize-typescript";
 import bcrypt from "bcrypt";
+import Vehicle from "./Vehicle";
 
 @Table({
   tableName: "users",
@@ -19,7 +21,7 @@ export default class User extends Model {
     defaultValue: DataType.UUIDV4,
     primaryKey: true,
   })
-  id!: string;
+  declare id: string;
 
   @Column({
     type: DataType.STRING,
@@ -90,4 +92,7 @@ export default class User extends Model {
       instance.setDataValue("password", hashedPassword);
     }
   }
+
+  @HasMany(() => Vehicle)
+  vehicles!: Vehicle[];
 }
