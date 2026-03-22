@@ -1,15 +1,25 @@
 import { Request, Response } from "express";
+import { AuthRequest } from "../middlewares/authMiddleware";
 import Vehicle from "../models/Vehicle";
 import User from "../models/User";
 import VehicleImage from "../models/VehicleImage"; // <-- 1. Nova importação aqui!
 
 export default class VehicleController {
-  static async create(req: Request, res: Response): Promise<Response> {
+  static async create(req: AuthRequest, res: Response): Promise<Response> {
     try {
-      const newVehicle = await Vehicle.create(req.body);
-      return res
-        .status(201)
-        .json({ message: "Veículo anunciado!", vehicle: newVehicle });
+      // PEGANDO O ID DIRETAMENTE DO TOKEN (Segurança Máxima)
+      const loggedUserId = req.userId;
+
+      // Criamos o veículo injetando o ID do usuário logado e o restante do corpo da requisição
+      const newVehicle = await Vehicle.create({
+        ...req.body,
+        userId: loggedUserId, // Sobrescreve qualquer userId que venha no JSON
+      });
+
+      return res.status(201).json({
+        message: "Veículo anunciado com sucesso!",
+        vehicle: newVehicle,
+      });
     } catch (error: any) {
       return res.status(400).json({ error: error.message });
     }
@@ -47,11 +57,25 @@ export default class VehicleController {
     }
   }
 
-  static async update(req: Request, res: Response): Promise<Response> {
+  // PUT: Atualizar o anúncio
+  static async update(req: AuthRequest, res: Response): Promise<Response> {
     try {
-      const vehicle = await Vehicle.findByPk(req.params.id as string);
-      if (!vehicle)
-        return res.status(404).json({ error: "Veículo não encontrado" });
+      const { id } = req.params;
+      const loggedUserId = req.userId;
+
+      const vehicle = await Vehicle.findByPk(id as string);
+
+      if (!vehicle) {
+        return res.status(404).json({ error: "Veículo não encontrado." });
+      }
+
+      // --- REGRA DE OURO: Só o dono mexe! ---
+      if (vehicle.userId !== loggedUserId) {
+        return res.status(403).json({
+          error:
+            "Operação negada: Você não tem permissão para editar um anúncio que não é seu.",
+        });
+      }
 
       await vehicle.update(req.body);
       return res
@@ -62,14 +86,28 @@ export default class VehicleController {
     }
   }
 
-  static async delete(req: Request, res: Response): Promise<Response> {
+  // DELETE: Apagar o anúncio
+  static async delete(req: AuthRequest, res: Response): Promise<Response> {
     try {
-      const deleted = await Vehicle.destroy({
-        where: { id: req.params.id as string },
-      });
-      if (!deleted)
-        return res.status(404).json({ error: "Veículo não encontrado" });
-      return res.status(204).send();
+      const { id } = req.params;
+      const loggedUserId = req.userId;
+
+      const vehicle = await Vehicle.findByPk(id as string);
+
+      if (!vehicle) {
+        return res.status(404).json({ error: "Veículo não encontrado." });
+      }
+
+      // --- REGRA DE OURO: Só o dono apaga! ---
+      if (vehicle.userId !== loggedUserId) {
+        return res.status(403).json({
+          error:
+            "Operação negada: Você não pode excluir o anúncio de outro usuário.",
+        });
+      }
+
+      await vehicle.destroy();
+      return res.status(204).send(); // 204 significa "Sucesso, mas sem conteúdo para retornar"
     } catch (error: any) {
       return res.status(500).json({ error: error.message });
     }

@@ -1,13 +1,19 @@
 import { Request, Response } from "express";
+import { AuthRequest } from "../middlewares/authMiddleware";
 import Review from "../models/Review";
 import User from "../models/User";
 import Proposal from "../models/Proposal";
 import Vehicle from "../models/Vehicle";
 
 export default class ReviewController {
-  static async create(req: Request, res: Response): Promise<Response> {
+  static async create(req: AuthRequest, res: Response): Promise<Response> {
     try {
-      const { reviewerId, reviewedId, rating } = req.body;
+      const reviewerId = req.userId;
+      const { reviewedId, rating, comment } = req.body;
+
+      if (!reviewerId) {
+        return res.status(401).json({ error: "Usuário não autenticado." });
+      }
 
       // 1. Validações Básicas
       if (reviewerId === reviewedId) {
@@ -78,7 +84,13 @@ export default class ReviewController {
       // ----------------------------------------------------------------
 
       // Se passou por todas as barreiras, guarda a avaliação!
-      const newReview = await Review.create(req.body);
+      const newReview = await Review.create({
+        reviewerId,
+        reviewedId,
+        rating,
+        comment,
+      });
+
       return res.status(201).json({
         message: "Avaliação registada com sucesso!",
         review: newReview,

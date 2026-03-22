@@ -3,19 +3,18 @@ import {
   Column,
   Model,
   DataType,
-  IsEmail,
-  Unique,
-  BeforeSave,
   HasMany,
+  BeforeCreate,
+  BeforeSave,
 } from "sequelize-typescript";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs"; // <-- Importamos o mestre da criptografia
 import Vehicle from "./Vehicle";
 import Proposal from "./Proposal";
 import Review from "./Review";
 
 @Table({
   tableName: "users",
-  timestamps: true, // Cria automaticamente as colunas createdAt e updatedAt
+  timestamps: true,
 })
 export default class User extends Model {
   @Column({
@@ -25,94 +24,41 @@ export default class User extends Model {
   })
   declare id: string;
 
-  @Column({
-    type: DataType.STRING,
-    allowNull: false,
-  })
-  name!: string;
+  @Column({ type: DataType.STRING, allowNull: false })
+  declare name: string;
 
-  @IsEmail
-  @Unique
-  @Column({
-    type: DataType.STRING,
-    allowNull: false,
-    validate: {
-      notEmpty: {
-        msg: "O e-mail não pode estar vazio.",
-      },
-    },
-  })
-  email!: string;
+  @Column({ type: DataType.STRING, allowNull: false, unique: true })
+  declare email: string;
+
+  @Column({ type: DataType.STRING, allowNull: false })
+  declare password: string;
 
   @Column({ type: DataType.STRING, allowNull: false })
   declare phone: string;
 
   @Column({ type: DataType.DATEONLY, allowNull: false })
-  declare birthDate: string; // Formato esperado: YYYY-MM-DD
+  declare birthDate: string;
 
-  @Unique
-  @Column({
-    type: DataType.STRING,
-    allowNull: false,
-    validate: {
-      isCpfValid(value: string) {
-        // Regex simples para garantir que o formato é um CPF válido (com ou sem pontuação)
-        const cpfRegex = /^\d{3}\.\d{3}\.\d{3}\-\d{2}$|^\d{11}$/;
-        if (!cpfRegex.test(value)) {
-          throw new Error("O formato do CPF é inválido.");
-        }
-      },
-    },
-  })
-  cpf!: string;
-
-  @Column({
-    type: DataType.STRING,
-    allowNull: false,
-    validate: {
-      isStrongPassword(value: string) {
-        // Exigência da tabela: Validação de nível de senha
-        // Mínimo de 8 caracteres, 1 letra maiúscula, 1 minúscula, 1 número e 1 caractere especial
-        const passwordRegex =
-          /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
-        if (!passwordRegex.test(value)) {
-          throw new Error(
-            "A senha deve ter pelo menos 8 caracteres, incluindo uma letra maiúscula, uma minúscula, um número e um caractere especial.",
-          );
-        }
-      },
-    },
-  })
-  password!: string;
-
-  // Hook (Gatilho) para criptografar a senha antes de guardar na base de dados
-  @BeforeSave
+  // --- O "PEDÁGIO" DE SEGURANÇA (HOOK) ---
+  @BeforeSave // Executa antes de Criar (POST) e antes de Atualizar (PUT)
   static async hashPassword(instance: User) {
-    // Pegamos a senha bruta de forma segura usando o método nativo do Sequelize
-    const rawPassword = instance.getDataValue("password");
-
-    // Só criptografamos se a senha foi alterada/criada e se ela realmente existe
-    if (instance.changed("password") && rawPassword) {
-      const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash(rawPassword, salt);
-
-      // Inserimos a senha criptografada de volta na instância de forma segura
-      instance.setDataValue("password", hashedPassword);
+    // Só criptografa se a senha foi alterada ou é nova
+    if (instance.changed("password")) {
+      const salt = await bcrypt.genSalt(10); // Gera um "tempero" aleatório para a senha
+      instance.password = await bcrypt.hash(instance.password, salt);
     }
   }
 
+  // --- RELACIONAMENTOS ---
   @HasMany(() => Vehicle)
-  vehicles!: Vehicle[];
+  declare vehicles: Vehicle[];
 
-  // Um usuário pode fazer várias propostas
   @HasMany(() => Proposal, "buyerId")
   declare proposals: Proposal[];
 
-  // Avaliações que o usuário FEZ para outras pessoas
   @HasMany(() => Review, "reviewerId")
   declare givenReviews: Review[];
 
-  // Avaliações que o usuário RECEBEU de outras pessoas
   @HasMany(() => Review, "reviewedId")
   declare receivedReviews: Review[];
 }

@@ -1,12 +1,16 @@
 import { Router } from "express";
 import VehicleController from "../controllers/VehicleController";
+import { authMiddleware } from "../middlewares/authMiddleware"; // <-- Importe aqui
 
 const router = Router();
 
-router.post("/", VehicleController.create);
-router.get("/", VehicleController.getAll); // A Vitrine
-router.get("/:id", VehicleController.getById); // Detalhes do Carro
-router.put("/:id", VehicleController.update); // Editar Anúncio
-router.delete("/:id", VehicleController.delete); // Excluir Anúncio
+// Rotas PÚBLICAS (Qualquer um pode ver os carros)
+router.get("/", VehicleController.getAll);
+router.get("/:id", VehicleController.getById);
+
+// Rotas PROTEGIDAS (Só quem está logado pode anunciar ou mexer no anúncio)
+router.post("/", authMiddleware, VehicleController.create);
+router.put("/:id", authMiddleware, VehicleController.update);
+router.delete("/:id", authMiddleware, VehicleController.delete);
 
 export default router;
