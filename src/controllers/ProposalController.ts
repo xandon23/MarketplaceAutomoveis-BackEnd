@@ -15,11 +15,9 @@ export default class ProposalController {
         return res.status(404).json({ error: "Veículo não encontrado." });
 
       if (targetVehicle.userId === loggedUserId) {
-        return res
-          .status(403)
-          .json({
-            error: "Você não pode propor a compra do seu próprio carro!",
-          });
+        return res.status(403).json({
+          error: "Você não pode propor a compra do seu próprio carro!",
+        });
       }
 
       // Validação do carro de troca (precisa ser do comprador)
@@ -54,7 +52,14 @@ export default class ProposalController {
       const { id } = req.params as { id: string };
       const loggedUserId = req.userId;
 
-      const proposal = await Proposal.findByPk(id, { include: [Vehicle] });
+      const proposal = await Proposal.findByPk(id, {
+        include: [
+          {
+            model: Vehicle,
+            as: "targetVehicle", // <--- O "nome" da relação que você definiu no Model
+          },
+        ],
+      });
       if (!proposal)
         return res.status(404).json({ error: "Proposta não encontrada." });
 
@@ -70,11 +75,9 @@ export default class ProposalController {
       proposal.status = req.body.status;
       await proposal.save();
 
-      return res
-        .status(200)
-        .json({
-          message: `Status da proposta atualizado para: ${proposal.status}`,
-        });
+      return res.status(200).json({
+        message: `Status da proposta atualizado para: ${proposal.status}`,
+      });
     } catch (error: any) {
       return res.status(400).json({ error: error.message });
     }

@@ -28,13 +28,29 @@ export default class VehicleController {
   // GET: A Vitrine Completa (Carro + Vendedor + Galeria de Fotos)
   static async getAll(req: Request, res: Response): Promise<Response> {
     try {
-      const vehicles = await Vehicle.findAll({
+      // 1. Configuração da Paginação (Captura da URL ou usa padrão)
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 10;
+      const offset = (page - 1) * limit;
+
+      // 2. Busca paginada com Eager Loading (incluindo Fotos e Usuário)
+      const { count, rows } = await Vehicle.findAndCountAll({
+        limit,
+        offset,
+        order: [["createdAt", "DESC"]], // Ordem decrescente (mais novos primeiro)
         include: [
           { model: User, attributes: ["name", "email"] },
-          { model: VehicleImage, attributes: ["id", "url"] }, // <-- 2. Adicionamos as fotos aqui!
+          { model: VehicleImage, attributes: ["id", "url"] },
         ],
       });
-      return res.status(200).json(vehicles);
+
+      // 3. Retorno com metadados (O João vai precisar disso para criar os botões de "Próxima Página")
+      return res.status(200).json({
+        total: count,
+        totalPages: Math.ceil(count / limit),
+        currentPage: page,
+        vehicles: rows,
+      });
     } catch (error: any) {
       return res.status(500).json({ error: error.message });
     }

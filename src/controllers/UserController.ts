@@ -1,37 +1,77 @@
 import { Request, Response } from "express";
 import User from "../models/User";
+import { validarCPF } from "../utils/validators";
 
 export default class UserController {
   // POST: Criar um novo utilizador
-  static async create(req: Request, res: Response): Promise<Response> {
+  static async create(req: Request, res: Response) {
     try {
-      const { birthDate } = req.body;
+      const { name, email, password, cpf, birthDate, phone } = req.body;
 
-      // --- REGRA DE NEGÓCIO: Validação de Maioridade ---
-      if (birthDate) {
-        const dob = new Date(birthDate);
-        const ageDifMs = Date.now() - dob.getTime();
-        const ageDate = new Date(ageDifMs);
-        const age = Math.abs(ageDate.getUTCFullYear() - 1970); // Truque limpo para calcular a idade exata
+      // 1. VALIDAÇÃO DE MAIORIDADE (Regra de Negócio Crítica)
+      const dataNascimento = new Date(birthDate);
+      const hoje = new Date(); // Considera a data atual do sistema (2026)
+      let idade = hoje.getFullYear() - dataNascimento.getFullYear();
+      const mes = hoje.getMonth() - dataNascimento.getMonth();
 
-        if (age < 18) {
-          return res.status(403).json({
-            error:
-              "Acesso negado: É necessário ter 18 anos ou mais para criar uma conta e negociar.",
-          });
-        }
+      if (mes < 0 || (mes === 0 && hoje.getDate() < dataNascimento.getDate())) {
+        idade--;
       }
-      // ------------------------------------------------
 
-      const newUser = await User.create(req.body);
-      const userWithoutPassword = newUser.toJSON();
-      delete (userWithoutPassword as any).password;
+      if (idade < 18) {
+        return res.status(403).json({
+          error:
+            "Acesso negado: É necessário ter 18 anos ou mais para se cadastrar no AutoZoom.",
+        });
+      }
 
-      return res
-        .status(201)
-        .json({ message: "Utilizador criado!", user: userWithoutPassword });
+      // 2. VALIDAÇÃO DE E-MAIL (Critério: Back-end)
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({ error: "Formato de e-mail inválido." });
+      }
+
+      // 3. VALIDAÇÃO REAL DE CPF (Critério: Back-end)
+      if (!validarCPF(cpf)) {
+        return res.status(400).json({ error: "O CPF informado é inválido." });
+      }
+      const cpfLimpo = cpf.replace(/\D/g, "");
+
+      // 4. VALIDAÇÃO DE NÍVEL DE SENHA (Critério: Tech Forge)
+      const senhaRegex = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
+      if (!senhaRegex.test(password)) {
+        return res.status(400).json({
+          error:
+            "A senha deve conter no mínimo 8 caracteres, incluindo letras, números e caracteres especiais.",
+        });
+      }
+
+      // 5. VERIFICAÇÃO DE DUPLICIDADE
+      const userExists = await User.findOne({ where: { email } });
+      const cpfExists = await User.findOne({ where: { cpf: cpfLimpo } });
+
+      if (userExists || cpfExists) {
+        return res
+          .status(409)
+          .json({ error: "Usuário já cadastrado com este e-mail ou CPF." });
+      }
+
+      // 6. CRIAÇÃO DO REGISTRO
+      const user = await User.create({
+        name,
+        email,
+        password,
+        cpf: cpfLimpo,
+        birthDate,
+        phone,
+      });
+
+      return res.status(201).json(user);
     } catch (error: any) {
-      return res.status(400).json({ error: error.message });
+      console.error("Erro no cadastro:", error);
+      return res
+        .status(500)
+        .json({ error: "Erro interno no servidor ao processar o cadastro." });
     }
   }
 

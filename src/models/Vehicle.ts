@@ -56,7 +56,20 @@ export default class Vehicle extends Model {
   declare description: string;
 
   // Coluna JSON para guardar a lista de itens da sua imagem
-  @Column({ type: DataType.JSON, allowNull: true })
+  @Column({
+    type: DataType.TEXT, // Usamos TEXT para garantir compatibilidade total
+    allowNull: true,
+    get() {
+      const rawValue = this.getDataValue("features");
+      if (!rawValue) return []; // Se for nulo, retorna lista vazia
+      // Se o banco retornar como string, nós transformamos em objeto/array
+      return typeof rawValue === "string" ? JSON.parse(rawValue) : rawValue;
+    },
+    set(val: string[]) {
+      // Garante que a lista seja salva como uma string JSON no banco
+      this.setDataValue("features", JSON.stringify(val));
+    },
+  })
   declare features: string[]; // Vai guardar: ["Airbag", "Alarme", "Freio ABS"]
 
   // --- RELACIONAMENTOS ---

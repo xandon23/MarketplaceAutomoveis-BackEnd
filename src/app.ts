@@ -17,7 +17,7 @@ app.use("/uploads", express.static("uploads"));
 app.use("/auth", AuthRoutes);
 app.use("/users", UserRoutes);
 app.use("/vehicles", VehicleRoutes);
-app.use("/images", VehicleImageRoutes);
+app.use("/vehicles", VehicleImageRoutes);
 app.use("/proposals", ProposalRoutes);
 app.use("/reviews", ReviewRoutes);
 

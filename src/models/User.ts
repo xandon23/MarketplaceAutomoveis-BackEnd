@@ -39,6 +39,9 @@ export default class User extends Model {
   @Column({ type: DataType.DATEONLY, allowNull: false })
   declare birthDate: string;
 
+  @Column({ type: DataType.STRING, allowNull: false, unique: true }) // Garante que o banco nunca aceite dois CPFs iguais
+  declare cpf: string;
+
   // --- O "PEDÁGIO" DE SEGURANÇA (HOOK) ---
   @BeforeSave // Executa antes de Criar (POST) e antes de Atualizar (PUT)
   static async hashPassword(instance: User) {
