@@ -13,4 +13,7 @@ router.get("/vehicle/:vehicleId", ProposalController.getByVehicle);
 // Rota para mudar o status da proposta (Aceitar/Recusar)
 router.put("/:id/status", authMiddleware, ProposalController.updateStatus);
 
+// PATCH é o método ideal para atualizar apenas um campo (o status)
+router.patch("/:id/status", authMiddleware, ProposalController.updateStatus);
+
 export default router;

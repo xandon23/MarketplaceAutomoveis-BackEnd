@@ -7,79 +7,136 @@ import Vehicle from "../models/Vehicle";
 export default class ProposalController {
   static async create(req: AuthRequest, res: Response): Promise<Response> {
     try {
-      const { targetVehicleId, offeredVehicleId } = req.body;
-      const loggedUserId = req.userId; // ID do comprador vem do Token
+      const loggedUserId = req.userId; // O cara que está tentando comprar
+      // Extraímos o offeredVehicleId que você adicionou
+      const { targetVehicleId, cashOffer, offeredVehicleId } = req.body;
 
-      const targetVehicle = await Vehicle.findByPk(targetVehicleId);
-      if (!targetVehicle)
-        return res.status(404).json({ error: "Veículo não encontrado." });
-
-      if (targetVehicle.userId === loggedUserId) {
-        return res.status(403).json({
-          error: "Você não pode propor a compra do seu próprio carro!",
+      // 1. Validação de Valor da Oferta (Permitimos 0 caso seja troca chave na chave)
+      if (!offeredVehicleId && cashOffer <= 0) {
+        // Se NÃO tem carro na troca, o valor tem que ser obrigatóriamente maior que zero
+        return res.status(400).json({
+          error:
+            "O valor da proposta deve ser maior que zero quando não há veículo oferecido na troca.",
         });
       }
 
-      // Validação do carro de troca (precisa ser do comprador)
+      if (offeredVehicleId && cashOffer < 0) {
+        // Se TEM carro na troca, aceitamos R$ 0, mas nunca valor negativo
+        return res.status(400).json({
+          error: "O valor em dinheiro da proposta não pode ser negativo.",
+        });
+      }
+
+      // 2. Buscamos o veículo alvo no banco para saber quem é o dono
+      const vehicle = await Vehicle.findByPk(targetVehicleId);
+
+      if (!vehicle) {
+        return res.status(404).json({ error: "Veículo não encontrado." });
+      }
+
+      // 3. Regra de Ouro: Vendedor não pode fazer proposta no próprio carro
+      if (vehicle.userId === loggedUserId) {
+        return res.status(400).json({
+          error:
+            "Operação bloqueada: Você não pode fazer uma proposta no seu próprio veículo.",
+        });
+      }
+
+      // 4. Regra: O carro alvo ainda pode receber propostas?
+      if (vehicle.status !== "available") {
+        return res.status(400).json({
+          error: "Este veículo já foi vendido ou não está mais disponível.",
+        });
+      }
+
+      // 5. NOVA REGRA: Validação do carro de troca (Trade-in)
       if (offeredVehicleId) {
         const offeredVehicle = await Vehicle.findByPk(offeredVehicleId);
+
+        // O carro de troca existe e é de quem está logado? (Código do seu print)
         if (!offeredVehicle || offeredVehicle.userId !== loggedUserId) {
           return res
             .status(403)
             .json({ error: "O veículo de troca deve pertencer a você." });
         }
+
+        // Trava de Segurança Bônus: O carro oferecido não pode já ter sido vendido!
+        if (offeredVehicle.status !== "available") {
+          return res.status(400).json({
+            error:
+              "O veículo que você está oferecendo na troca já foi vendido ou não está disponível.",
+          });
+        }
       }
 
+      // Passou por todas as travas de segurança? Salva a proposta!
       const newProposal = await Proposal.create({
-        ...req.body,
-        buyerId: loggedUserId, // Forçamos o ID do comprador real
+        targetVehicleId,
+        buyerId: loggedUserId,
+        cashOffer,
+        offeredVehicleId: offeredVehicleId || null, // Salva o ID do carro de troca (ou nulo se for só dinheiro)
+        status: "pending", // Toda proposta nasce como 'pendente'
       });
 
-      return res
-        .status(201)
-        .json({ message: "Proposta enviada!", proposal: newProposal });
+      return res.status(201).json({
+        message: "Proposta enviada com sucesso!",
+        proposal: newProposal,
+      });
     } catch (error: any) {
-      return res.status(400).json({ error: error.message });
+      // 👇 Esta linha vai imprimir no terminal a fofoca inteira do Sequelize!
+      console.error("💥 ERRO REAL DO SEQUELIZE:", error);
+
+      // 👇 E aqui devolvemos a mensagem técnica pro teste ver
+      return res.status(500).json({ error: error.message });
     }
   }
 
-  // PUT: Aceitar ou Recusar (Somente o Vendedor)
   static async updateStatus(
     req: AuthRequest,
     res: Response,
   ): Promise<Response> {
     try {
-      const { id } = req.params as { id: string };
+      const { id } = req.params; // ID da Proposta
+      const { status } = req.body; // 'PENDING' ou 'REJECTED'
       const loggedUserId = req.userId;
 
-      const proposal = await Proposal.findByPk(id, {
-        include: [
-          {
-            model: Vehicle,
-            as: "targetVehicle", // <--- O "nome" da relação que você definiu no Model
-          },
-        ],
-      });
-      if (!proposal)
-        return res.status(404).json({ error: "Proposta não encontrada." });
-
-      // --- VALIDAÇÃO DE SEGURANÇA ---
-      // Verificamos se quem está tentando aceitar é o DONO do carro anunciado
-      if (proposal.targetVehicle.userId !== loggedUserId) {
-        return res.status(403).json({
-          error:
-            "Apenas o vendedor do veículo pode aceitar ou recusar propostas.",
+      // Apenas permitimos esses dois status manuais nesta rota
+      if (!["PENDING", "REJECTED"].includes(status)) {
+        return res.status(400).json({
+          error: "Status inválido. Use 'PENDING' ou 'REJECTED'.",
         });
       }
 
-      proposal.status = req.body.status;
-      await proposal.save();
-
-      return res.status(200).json({
-        message: `Status da proposta atualizado para: ${proposal.status}`,
+      // 1. Buscamos a proposta e trazemos os dados do veículo junto
+      const proposal = await Proposal.findByPk(String(id), {
+        include: [{ model: Vehicle, as: "targetVehicle" }],
       });
+
+      if (!proposal)
+        return res.status(404).json({ error: "Proposta não encontrada." });
+
+      // 2. Trava de Segurança: Só o dono do carro pode mudar o status da proposta
+      if (proposal.targetVehicle?.userId !== loggedUserId) {
+        return res.status(403).json({
+          error:
+            "Apenas o proprietário do veículo pode alterar o status da proposta.",
+        });
+      }
+
+      // 3. Atualizamos a proposta
+      await proposal.update({ status });
+
+      // Mensagens personalizadas para o Front-end
+      const message =
+        status === "PENDING"
+          ? "Negociação iniciada! O contato do comprador foi liberado."
+          : "Negociação cancelada. A proposta foi recusada.";
+
+      return res.status(200).json({ message, proposal });
     } catch (error: any) {
-      return res.status(400).json({ error: error.message });
+      return res
+        .status(500)
+        .json({ error: "Erro interno ao atualizar status da proposta." });
     }
   }
 
@@ -89,9 +146,9 @@ export default class ProposalController {
     res: Response,
   ): Promise<Response> {
     try {
-      const { vehicleId } = req.params as { vehicleId: string };
+      const { targetVehicleId } = req.params as { targetVehicleId: string };
       const proposals = await Proposal.findAll({
-        where: { targetVehicleId: vehicleId },
+        where: { targetVehicleId: targetVehicleId },
         include: [{ model: User, as: "buyer", attributes: ["name", "phone"] }],
       });
       return res.status(200).json(proposals);

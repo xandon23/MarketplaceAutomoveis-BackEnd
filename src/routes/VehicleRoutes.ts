@@ -12,5 +12,7 @@ router.get("/:id", VehicleController.getById);
 router.post("/", authMiddleware, VehicleController.create);
 router.put("/:id", authMiddleware, VehicleController.update);
 router.delete("/:id", authMiddleware, VehicleController.delete);
+// POST ou PATCH para finalizar a venda do veículo
+router.patch("/:id/sell", authMiddleware, VehicleController.sell);
 
 export default router;

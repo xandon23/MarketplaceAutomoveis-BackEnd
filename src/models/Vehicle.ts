@@ -55,6 +55,12 @@ export default class Vehicle extends Model {
   @Column({ type: DataType.TEXT, allowNull: false })
   declare description: string;
 
+  @Column({
+    type: DataType.STRING,
+    defaultValue: "available", // Todo carro nasce disponível
+  })
+  declare status: string;
+
   // Coluna JSON para guardar a lista de itens da sua imagem
   @Column({
     type: DataType.TEXT, // Usamos TEXT para garantir compatibilidade total

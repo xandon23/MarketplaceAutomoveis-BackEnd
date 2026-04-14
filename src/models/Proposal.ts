@@ -25,8 +25,8 @@ export default class Proposal extends Model {
   declare cashOffer: number; // Valor em dinheiro oferecido
 
   @Column({
-    type: DataType.ENUM("PENDENTE", "ACEITO", "RECUSADO"), // Padrão profissional
-    defaultValue: "PENDENTE",
+    type: DataType.ENUM("PENDING", "ACCEPTED", "REJECTED"), // Padrão profissional
+    defaultValue: "PENDING",
     allowNull: false,
   })
   declare status: string; // O vendedor vai poder mudar isso depois
@@ -59,4 +59,6 @@ export default class Proposal extends Model {
 
   @BelongsTo(() => Vehicle, "offeredVehicleId")
   declare offeredVehicle: Vehicle;
+
+  @BelongsTo(() => Vehicle) vehicle!: Vehicle;
 }

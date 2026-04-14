@@ -2,18 +2,69 @@ import { Request, Response } from "express";
 import { AuthRequest } from "../middlewares/authMiddleware";
 import Vehicle from "../models/Vehicle";
 import User from "../models/User";
-import VehicleImage from "../models/VehicleImage"; // <-- 1. Nova importação aqui!
+import VehicleImage from "../models/VehicleImage";
+import sequelize from "../config/database";
+import Proposal from "../models/Proposal";
 
 export default class VehicleController {
   static async create(req: AuthRequest, res: Response): Promise<Response> {
     try {
       // PEGANDO O ID DIRETAMENTE DO TOKEN (Segurança Máxima)
       const loggedUserId = req.userId;
+      const {
+        brand,
+        model,
+        yearFabrication,
+        yearModel,
+        price,
+        mileage,
+        description,
+      } = req.body;
 
-      // Criamos o veículo injetando o ID do usuário logado e o restante do corpo da requisição
+      // --- INÍCIO DAS VALIDAÇÕES (REGRAS DE NEGÓCIO) ---
+
+      // 1. Validação de Preço
+      if (price <= 0) {
+        return res
+          .status(400)
+          .json({ error: "O preço do veículo deve ser maior que zero." });
+      }
+
+      // 2. Validação de Ano: Fabricação vs Modelo
+      if (yearModel < yearFabrication) {
+        return res.status(400).json({
+          error: "O ano do modelo não pode ser menor que o ano de fabricação.",
+        });
+      }
+
+      if (yearModel > yearFabrication + 1) {
+        return res.status(400).json({
+          error:
+            "O modelo do veículo não pode ser superior a 1 ano do ano de fabricação.",
+        });
+      }
+
+      // 3. Validação de "Carro do Futuro"
+      const currentYear = new Date().getFullYear();
+      if (yearFabrication > currentYear) {
+        return res.status(400).json({
+          error: `O ano de fabricação não pode ser maior que o ano atual (${currentYear}).`,
+        });
+      }
+
+      // --- FIM DAS VALIDAÇÕES ---
+
+      // Criamos o veículo injetando o ID do usuário logado e definindo o status inicial
       const newVehicle = await Vehicle.create({
-        ...req.body,
-        userId: loggedUserId, // Sobrescreve qualquer userId que venha no JSON
+        brand,
+        model,
+        yearFabrication,
+        yearModel,
+        price,
+        mileage,
+        description,
+        userId: loggedUserId, // Sobrescreve qualquer tentativa de fraude
+        status: "available", // Todo carro novo entra como 'disponível'
       });
 
       return res.status(201).json({
@@ -125,6 +176,82 @@ export default class VehicleController {
       await vehicle.destroy();
       return res.status(204).send(); // 204 significa "Sucesso, mas sem conteúdo para retornar"
     } catch (error: any) {
+      return res.status(500).json({ error: error.message });
+    }
+  }
+
+  static async sell(req: AuthRequest, res: Response): Promise<Response> {
+    const transaction = await sequelize.transaction(); // Inicia a operação casada
+
+    try {
+      const { id } = req.params; // ID do Veículo
+      const { winningProposalId } = req.body; // ID da proposta que ganhou
+      console.log("💥 DADOS QUE CHEGARAM:", req.body);
+      const loggedUserId = req.userId;
+
+      // 1. Busca o veículo
+      const vehicle = await Vehicle.findByPk(String(id));
+      if (!vehicle)
+        return res.status(404).json({ error: "Veículo não encontrado." });
+
+      // 2. Trava: Só o dono pode vender
+      if (vehicle.userId !== loggedUserId) {
+        return res
+          .status(403)
+          .json({ error: "Apenas o proprietário pode registrar a venda." });
+      }
+
+      // 3. Trava: O veículo já foi vendido?
+      if (vehicle.status === "sold") {
+        return res
+          .status(400)
+          .json({ error: "Este veículo já consta como vendido." });
+      }
+
+      // --- INÍCIO DA MÁGICA DA TRANSAÇÃO ---
+
+      // A) Marca o veículo como vendido
+      await vehicle.update({ status: "sold" }, { transaction });
+
+      // B) Marca a proposta vencedora como 'ACCEPTED' (ganha/concluída)
+      const [linhasAtualizadas] = await Proposal.update(
+        { status: "ACCEPTED" },
+        {
+          where: {
+            id: winningProposalId, // 👈 Simplificamos! Apenas o ID direto, sem conversão.
+          },
+          transaction, // Mantenha isso se você abriu a transação lá em cima
+        },
+      );
+
+      console.log("💥 LINHAS ATUALIZADAS (WON):", linhasAtualizadas);
+
+      // C) Pulo do Gato: Rejeita TODAS as outras propostas desse carro
+      const { Op } = require("sequelize"); // Importe os operadores do Sequelize no topo se não tiver
+      await Proposal.update(
+        { status: "rejected" },
+        {
+          where: {
+            targetVehicleId: id,
+            id: { [Op.ne]: String(winningProposalId) }, // [Op.ne] significa "Not Equal" (Diferente de)
+            status: { [Op.in]: ["pending", "in_negotiation"] }, // Só recusa as que estavam abertas
+          },
+          transaction,
+        },
+      );
+
+      // Se nenhuma linha de código quebrou, a gente salva tudo no banco de vez!
+      await transaction.commit();
+
+      return res.status(200).json({
+        message: "Venda finalizada com sucesso! Veículo saiu da vitrine.",
+      });
+    } catch (error: any) {
+      // Se algo deu errado, desfaz tudo (Rollback)
+      // 👇 Esta linha vai imprimir no terminal a fofoca inteira do Sequelize!
+      console.error("💥 ERRO REAL DO SEQUELIZE:", error);
+
+      // 👇 E aqui devolvemos a mensagem técnica pro teste ver
       return res.status(500).json({ error: error.message });
     }
   }
