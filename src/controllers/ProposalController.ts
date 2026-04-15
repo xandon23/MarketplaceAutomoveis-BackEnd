@@ -109,7 +109,10 @@ export default class ProposalController {
 
       // 1. Buscamos a proposta e trazemos os dados do veículo junto
       const proposal = await Proposal.findByPk(String(id), {
-        include: [{ model: Vehicle, as: "targetVehicle" }],
+        include: [
+          { model: Vehicle, as: "targetVehicle" },
+          { model: Vehicle, as: "offeredVehicle" }, // 👈 ADICIONE ESTA LINHA!
+        ],
       });
 
       if (!proposal)
