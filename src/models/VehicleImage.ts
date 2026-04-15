@@ -21,13 +21,13 @@ export default class VehicleImage extends Model {
   declare id: string;
 
   @Column({ type: DataType.STRING, allowNull: false })
-  url!: string; // Aqui ficará salvo o caminho da imagem, ex: "/uploads/foto1.jpg"
+  declare url: string; // Aqui ficará salvo o caminho da imagem, ex: "/uploads/foto1.jpg"
 
   // Chave Estrangeira: A qual veículo esta foto pertence?
   @ForeignKey(() => Vehicle)
   @Column({ type: DataType.UUID, allowNull: false })
-  vehicleId!: string;
+  declare vehicleId: string;
 
   @BelongsTo(() => Vehicle)
-  vehicle!: Vehicle;
+  declare vehicle: Vehicle;
 }

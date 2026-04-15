@@ -146,13 +146,19 @@ export default class ProposalController {
     res: Response,
   ): Promise<Response> {
     try {
-      const { targetVehicleId } = req.params as { targetVehicleId: string };
+      const targetVehicleId = req.params.vehicleId;
+      if (!targetVehicleId) {
+        return res
+          .status(400)
+          .json({ error: "ID do veículo não foi fornecido na rota." });
+      }
       const proposals = await Proposal.findAll({
         where: { targetVehicleId: targetVehicleId },
         include: [{ model: User, as: "buyer", attributes: ["name", "phone"] }],
       });
       return res.status(200).json(proposals);
     } catch (error: any) {
+      console.error("💥 ERRO REAL DO SEQUELIZE NO GET:", error);
       return res.status(500).json({ error: error.message });
     }
   }

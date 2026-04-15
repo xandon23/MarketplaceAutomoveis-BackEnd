@@ -14,11 +14,15 @@ export default class VehicleController {
       const {
         brand,
         model,
-        yearFabrication,
-        yearModel,
-        price,
+        manufactureYear, // 👈 Se atente a esses nomes!
+        modelYear,
+        engine,
+        transmission,
+        location,
         mileage,
+        price,
         description,
+        features,
       } = req.body;
 
       // --- INÍCIO DAS VALIDAÇÕES (REGRAS DE NEGÓCIO) ---
@@ -31,13 +35,13 @@ export default class VehicleController {
       }
 
       // 2. Validação de Ano: Fabricação vs Modelo
-      if (yearModel < yearFabrication) {
+      if (modelYear < manufactureYear) {
         return res.status(400).json({
           error: "O ano do modelo não pode ser menor que o ano de fabricação.",
         });
       }
 
-      if (yearModel > yearFabrication + 1) {
+      if (modelYear > manufactureYear + 1) {
         return res.status(400).json({
           error:
             "O modelo do veículo não pode ser superior a 1 ano do ano de fabricação.",
@@ -46,7 +50,7 @@ export default class VehicleController {
 
       // 3. Validação de "Carro do Futuro"
       const currentYear = new Date().getFullYear();
-      if (yearFabrication > currentYear) {
+      if (manufactureYear > currentYear) {
         return res.status(400).json({
           error: `O ano de fabricação não pode ser maior que o ano atual (${currentYear}).`,
         });
@@ -58,13 +62,17 @@ export default class VehicleController {
       const newVehicle = await Vehicle.create({
         brand,
         model,
-        yearFabrication,
-        yearModel,
-        price,
+        manufactureYear,
+        modelYear,
+        engine,
+        transmission,
+        location,
         mileage,
+        price,
         description,
-        userId: loggedUserId, // Sobrescreve qualquer tentativa de fraude
-        status: "available", // Todo carro novo entra como 'disponível'
+        features,
+        status: "available",
+        userId: req.userId, // Pega o dono do token!
       });
 
       return res.status(201).json({
