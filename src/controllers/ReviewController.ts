@@ -2,86 +2,35 @@ import { Request, Response } from "express";
 import { AuthRequest } from "../middlewares/authMiddleware";
 import Review from "../models/Review";
 import User from "../models/User";
-import Proposal from "../models/Proposal";
 import Vehicle from "../models/Vehicle";
 import { Op } from "sequelize";
 
 export default class ReviewController {
+  /**
+   * MÉTODOS PÚBLICOS (ORQUESTRADORES)
+   */
+
   static async create(req: AuthRequest, res: Response): Promise<Response> {
     try {
-      const reviewerId = req.userId;
       const { reviewedId, rating, comment } = req.body;
+      const reviewerId = req.userId as string;
 
-      if (!reviewerId) {
-        return res.status(401).json({ error: "Usuário não autenticado." });
-      }
+      ReviewController.validateBasicRules(reviewerId, reviewedId, rating);
+      await ReviewController.checkDuplicateReview(reviewerId, reviewedId);
+      await ReviewController.validateNegotiation(reviewerId, reviewedId);
 
-      // 1. Validações Básicas
-      if (reviewerId === reviewedId) {
-        return res
-          .status(403)
-          .json({ error: "Operação negada: Não pode avaliar-se a si mesmo." });
-      }
-
-      if (rating < 1 || rating > 5) {
-        return res
-          .status(400)
-          .json({ error: "A nota deve ser um valor entre 1 e 5." });
-      }
-
-      // --- NOVA REGRA: Prevenir avaliações duplicadas ---
-      const existingReview = await Review.findOne({
-        where: {
-          reviewerId: reviewerId,
-          reviewedId: reviewedId,
-        },
-      });
-
-      if (existingReview) {
-        return res.status(403).json({
-          error:
-            "Operação negada: Você já avaliou este vendedor anteriormente. Apenas uma avaliação é permitida por usuário.",
-        });
-      }
-
-      // --- 2. REGRA DE NEGÓCIO DE OURO: Validação de Negócio Fechado ---
-      // Busca se existe algum veículo vendido que ligue essas duas pessoas
-      const closedDeal = await Vehicle.findOne({
-        where: {
-          status: "sold", // O carro precisa estar vendido
-          [Op.or]: [
-            // Cenário A: O Avaliador (reviewerId) comprou do Avaliado (reviewedId)
-            { buyerId: reviewerId, userId: reviewedId },
-
-            // Cenário B: O Avaliador (reviewerId) vendeu para o Avaliado (reviewedId)
-            { userId: reviewerId, buyerId: reviewedId },
-          ],
-        },
-      });
-
-      // Se não encontrou nenhum negócio fechado entre os dois, barra a avaliação!
-      if (!closedDeal) {
-        return res.status(403).json({
-          error:
-            "Operação negada: Só pode avaliar utilizadores com os quais tenha um negócio fechado.",
-        });
-      }
-      // ----------------------------------------------------------------
-
-      // Se passou por todas as barreiras, guarda a avaliação!
-      const newReview = await Review.create({
+      const review = await Review.create({
         reviewerId,
         reviewedId,
         rating,
         comment,
       });
-
-      return res.status(201).json({
-        message: "Avaliação registada com sucesso!",
-        review: newReview,
-      });
-    } catch (error: any) {
-      return res.status(400).json({ error: error.message });
+      return res
+        .status(201)
+        .json({ message: "Avaliação registada com sucesso!", review });
+    } catch (error) {
+      const err = error as Error;
+      return ReviewController.handleError(res, err, 400);
     }
   }
 
@@ -90,13 +39,75 @@ export default class ReviewController {
     res: Response,
   ): Promise<Response> {
     try {
+      const { userId } = req.params;
       const reviews = await Review.findAll({
-        where: { reviewedId: req.params.userId as string },
+        where: { reviewedId: userId },
         include: [{ model: User, as: "reviewer", attributes: ["name"] }],
       });
       return res.status(200).json(reviews);
-    } catch (error: any) {
-      return res.status(500).json({ error: error.message });
+    } catch (error) {
+      const err = error as Error;
+      return ReviewController.handleError(res, err, 500);
     }
+  }
+
+  /**
+   * MÉTODOS PRIVADOS (REGRAS TECH FORGE) - MÁXIMO 10 LINHAS CADA
+   */
+
+  private static validateBasicRules(
+    revId: string,
+    targetId: string,
+    rating: number,
+  ): void {
+    if (!revId) throw new Error("Usuário não autenticado.|401");
+    if (revId === targetId)
+      throw new Error("Operação negada: Não pode avaliar-se a si mesmo.|403");
+    if (rating < 1 || rating > 5)
+      throw new Error("A nota deve ser um valor entre 1 e 5.|400");
+  }
+
+  private static async checkDuplicateReview(
+    revId: string,
+    targetId: string,
+  ): Promise<void> {
+    const exists = await Review.findOne({
+      where: { reviewerId: revId, reviewedId: targetId },
+    });
+    if (exists) {
+      throw new Error(
+        "Operação negada: Você já avaliou este vendedor anteriormente.|403",
+      );
+    }
+  }
+
+  private static async validateNegotiation(
+    revId: string,
+    targetId: string,
+  ): Promise<void> {
+    const closedDeal = await Vehicle.findOne({
+      where: {
+        status: "sold",
+        [Op.or]: [
+          { buyerId: revId, userId: targetId },
+          { userId: revId, buyerId: targetId },
+        ],
+      },
+    });
+    if (!closedDeal) {
+      throw new Error(
+        "Operação negada: Só pode avaliar quem tem negócio fechado.|403",
+      );
+    }
+  }
+
+  private static handleError(
+    res: Response,
+    err: Error,
+    defaultStatus: number,
+  ): Response {
+    const [message, status] = err.message.split("|");
+    const statusCode = status ? Number(status) : defaultStatus;
+    return res.status(statusCode).json({ error: message });
   }
 }

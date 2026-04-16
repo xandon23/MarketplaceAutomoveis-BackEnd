@@ -4,37 +4,55 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
 export default class AuthController {
+  /**
+   * MÉTODOS PÚBLICOS (ORQUESTRADORES)
+   */
+
   static async login(req: Request, res: Response): Promise<Response> {
     try {
       const { email, password } = req.body;
+      const user = await AuthController.getUser(email);
 
-      // 1. Verificar se o usuário existe
-      const user = await User.findOne({ where: { email } });
-      if (!user) {
-        return res.status(401).json({ error: "E-mail ou senha inválidos." });
-      }
-
-      // 2. Comparar a senha digitada com o hash do banco
-      const isPasswordValid = await bcrypt.compare(password, user.password);
-      if (!isPasswordValid) {
-        return res.status(401).json({ error: "E-mail ou senha inválidos." });
-      }
-
-      // 3. Gerar o Token JWT (O "crachá" do usuário)
-      // Em um projeto real, a 'SECRET_KEY' ficaria em um arquivo .env
-      const token = jwt.sign(
-        { id: user.id, name: user.name },
-        "SuaChaveSecretaSuperDificil123",
-        { expiresIn: "1d" }, // O login vale por 1 dia
-      );
+      await AuthController.checkPassword(password, user.password);
+      const token = AuthController.issueToken(user);
 
       return res.status(200).json({
         message: "Login realizado com sucesso!",
         user: { id: user.id, name: user.name, email: user.email },
-        token: token,
+        token,
       });
-    } catch (error: any) {
-      return res.status(500).json({ error: error.message });
+    } catch (error) {
+      return AuthController.handleError(res, error as Error);
     }
+  }
+
+  /**
+   * MÉTODOS PRIVADOS (TECH FORGE & CLEAN CODE) - MÁXIMO 10 LINHAS CADA
+   */
+
+  private static async getUser(email: string): Promise<User> {
+    const user = await User.findOne({ where: { email } });
+    if (!user) throw new Error("E-mail ou senha inválidos.|401");
+    return user;
+  }
+
+  private static async checkPassword(
+    plain: string,
+    hashed: string,
+  ): Promise<void> {
+    const isValid = await bcrypt.compare(plain, hashed);
+    if (!isValid) throw new Error("E-mail ou senha inválidos.|401");
+  }
+
+  private static issueToken(user: User): string {
+    const secret = "SuaChaveSecretaSuperDificil123";
+    const payload = { id: user.id, name: user.name };
+    return jwt.sign(payload, secret, { expiresIn: "1d" });
+  }
+
+  private static handleError(res: Response, err: Error): Response {
+    const [msg, status] = err.message.split("|");
+    const statusCode = status ? Number(status) : 500;
+    return res.status(statusCode).json({ error: msg });
   }
 }

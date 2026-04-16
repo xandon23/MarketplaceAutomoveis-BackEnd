@@ -1,4 +1,4 @@
-import { Response } from "express";
+import { Response, Request } from "express";
 import { AuthRequest } from "../middlewares/authMiddleware";
 import Proposal from "../models/Proposal";
 import User from "../models/User";
@@ -6,90 +6,41 @@ import Vehicle from "../models/Vehicle";
 import VehicleImage from "../models/VehicleImage";
 
 export default class ProposalController {
+  /**
+   * MÉTODOS PÚBLICOS (ORQUESTRADORES)
+   */
+
   static async create(req: AuthRequest, res: Response): Promise<Response> {
     try {
-      const loggedUserId = req.userId; // O cara que está tentando comprar
-      // Extraímos o offeredVehicleId que você adicionou
-      const { targetVehicleId, cashOffer, offeredVehicleId } = req.body;
+      const { targetVehicleId, cashOffer, offeredVehicleId, message } =
+        req.body;
+      const vehicle = await ProposalController.fetchVehicle(targetVehicleId);
 
-      // 1. Validação de Valor da Oferta (Permitimos 0 caso seja troca chave na chave)
-      if (!offeredVehicleId && cashOffer <= 0) {
-        // Se NÃO tem carro na troca, o valor tem que ser obrigatóriamente maior que zero
-        return res.status(400).json({
-          error:
-            "O valor da proposta deve ser maior que zero quando não há veículo oferecido na troca.",
-        });
-      }
-
-      if (offeredVehicleId && cashOffer < 0) {
-        // Se TEM carro na troca, aceitamos R$ 0, mas nunca valor negativo
-        return res.status(400).json({
-          error: "O valor em dinheiro da proposta não pode ser negativo.",
-        });
-      }
-
-      // 2. Buscamos o veículo alvo no banco para saber quem é o dono
-      const vehicle = await Vehicle.findByPk(targetVehicleId);
-
-      if (!vehicle) {
-        return res.status(404).json({ error: "Veículo não encontrado." });
-      }
-
-      // 3. Regra de Ouro: Vendedor não pode fazer proposta no próprio carro
-      if (vehicle.userId === loggedUserId) {
-        return res.status(400).json({
-          error:
-            "Operação bloqueada: Você não pode fazer uma proposta no seu próprio veículo.",
-        });
-      }
-
-      // 4. Regra: O carro alvo ainda pode receber propostas?
-      if (vehicle.status !== "available") {
-        return res.status(400).json({
-          error: "Este veículo já foi vendido ou não está mais disponível.",
-        });
-      }
-
-      // 5. NOVA REGRA: Validação do carro de troca (Trade-in)
-      if (offeredVehicleId) {
-        const offeredVehicle = await Vehicle.findByPk(offeredVehicleId);
-
-        // O carro de troca existe e é de quem está logado? (Código do seu print)
-        if (!offeredVehicle || offeredVehicle.userId !== loggedUserId) {
-          return res
-            .status(403)
-            .json({ error: "O veículo de troca deve pertencer a você." });
-        }
-
-        // Trava de Segurança Bônus: O carro oferecido não pode já ter sido vendido!
-        if (offeredVehicle.status !== "available") {
-          return res.status(400).json({
-            error:
-              "O veículo que você está oferecendo na troca já foi vendido ou não está disponível.",
-          });
-        }
-      }
-
-      // Passou por todas as travas de segurança? Salva a proposta!
-      const newProposal = await Proposal.create({
-        targetVehicleId,
-        buyerId: loggedUserId,
+      ProposalController.validateProposalRules(
+        vehicle,
+        req.userId as string,
         cashOffer,
-        offeredVehicleId: offeredVehicleId || null, // Salva o ID do carro de troca (ou nulo se for só dinheiro)
-        status: "pending", // Toda proposta nasce como 'pendente'
-        message: req.body.message || null, // Mensagem opcional para o vendedor (ex: "Pago à vista se fechar hoje")
-      });
+        !!offeredVehicleId,
+      );
+      if (offeredVehicleId)
+        await ProposalController.validateTradeIn(
+          offeredVehicleId,
+          req.userId as string,
+        );
 
-      return res.status(201).json({
-        message: "Proposta enviada com sucesso!",
-        proposal: newProposal,
+      const proposal = await Proposal.create({
+        targetVehicleId,
+        buyerId: req.userId,
+        cashOffer,
+        offeredVehicleId: offeredVehicleId || null,
+        status: "pending",
+        message: message || null,
       });
-    } catch (error: any) {
-      // 👇 Esta linha vai imprimir no terminal a fofoca inteira do Sequelize!
-      console.error("💥 ERRO REAL DO SEQUELIZE:", error);
-
-      // 👇 E aqui devolvemos a mensagem técnica pro teste ver
-      return res.status(500).json({ error: error.message });
+      return res
+        .status(201)
+        .json({ message: "Proposta enviada com sucesso!", proposal });
+    } catch (error) {
+      return ProposalController.handleError(res, error, 400);
     }
   }
 
@@ -98,112 +49,120 @@ export default class ProposalController {
     res: Response,
   ): Promise<Response> {
     try {
-      const { id } = req.params; // ID da Proposta
-      const { status } = req.body; // 'PENDING' ou 'REJECTED'
-      const loggedUserId = req.userId;
+      const { status } = req.body;
+      const proposal = await ProposalController.authorizeStatusUpdate(
+        req.params.id as string,
+        req.userId as string,
+        status,
+      );
 
-      // Apenas permitimos esses dois status manuais nesta rota
-      if (!["PENDING", "ACCEPTED", "REJECTED"].includes(status)) {
-        return res.status(400).json({
-          error: "Status inválido. Use 'PENDING', 'ACCEPTED' ou 'REJECTED'.",
-        });
-      }
-
-      // 1. Buscamos a proposta e trazemos os dados do veículo junto
-      const proposal = await Proposal.findByPk(String(id), {
-        include: [
-          { model: Vehicle, as: "targetVehicle" },
-          { model: Vehicle, as: "offeredVehicle" }, // 👈 ADICIONE ESTA LINHA!
-        ],
-      });
-
-      if (!proposal)
-        return res.status(404).json({ error: "Proposta não encontrada." });
-
-      // 2. Trava de Segurança: Só o dono do carro pode mudar o status da proposta
-      if (proposal.targetVehicle?.userId !== loggedUserId) {
-        return res.status(403).json({
-          error:
-            "Apenas o proprietário do veículo pode alterar o status da proposta.",
-        });
-      }
-
-      // 3. Atualizamos a proposta
       await proposal.update({ status });
-
-      // Mensagens personalizadas para o Front-end
-      const message =
-        status === "PENDING"
-          ? "Negociação iniciada! O contato do comprador foi liberado."
-          : "Negociação cancelada. A proposta foi recusada.";
-
-      return res.status(200).json({ message, proposal });
-    } catch (error: any) {
-      return res
-        .status(500)
-        .json({ error: "Erro interno ao atualizar status da proposta." });
+      const msg =
+        status === "REJECTED"
+          ? "Negociação cancelada."
+          : "Negociação iniciada!";
+      return res.status(200).json({ message: msg, proposal });
+    } catch (error) {
+      return ProposalController.handleError(res, error, 400);
     }
   }
 
-  // GET: Listar propostas recebidas por um veículo
-  static async getByVehicle(
-    req: AuthRequest,
-    res: Response,
-  ): Promise<Response> {
+  static async getByVehicle(req: Request, res: Response): Promise<Response> {
     try {
-      const targetVehicleId = req.params.vehicleId;
-      if (!targetVehicleId) {
-        return res
-          .status(400)
-          .json({ error: "ID do veículo não foi fornecido na rota." });
-      }
       const proposals = await Proposal.findAll({
-        where: { targetVehicleId: targetVehicleId },
+        where: { targetVehicleId: req.params.vehicleId },
         include: [
           { model: User, as: "buyer", attributes: ["name", "phone"] },
           { model: Vehicle, as: "offeredVehicle" },
         ],
       });
       return res.status(200).json(proposals);
-    } catch (error: any) {
-      console.error("💥 ERRO REAL DO SEQUELIZE NO GET:", error);
-      return res.status(500).json({ error: error.message });
+    } catch (error) {
+      return ProposalController.handleError(res, error, 500);
     }
   }
 
-  // GET: Buscar os detalhes de uma única proposta pelo ID
-  static async getById(req: AuthRequest, res: Response): Promise<Response> {
+  static async getById(req: Request, res: Response): Promise<Response> {
     try {
-      // Confirme se no seu arquivo de rotas o parâmetro chama ':id' (ex: router.get('/:id', ...))
-      const proposalId = req.params.id;
-
-      if (!proposalId) {
-        return res
-          .status(400)
-          .json({ error: "ID da proposta não foi fornecido na rota." });
-      }
-
-      const proposal = await Proposal.findByPk(String(proposalId), {
+      const proposal = await Proposal.findByPk(req.params.id as string, {
         include: [
           { model: User, as: "buyer", attributes: ["name", "phone", "email"] },
           {
             model: Vehicle,
             as: "offeredVehicle",
-            include: [
-              { model: VehicleImage, as: "images" }, // 👈 A MÁGICA ESTÁ AQUI! Traz as fotos junto.
-            ],
+            include: [{ model: VehicleImage, as: "images" }],
           },
         ],
       });
-
-      if (!proposal) {
-        return res.status(404).json({ error: "Proposta não encontrada." });
-      }
-
+      if (!proposal) throw new Error("Proposta não encontrada.|404");
       return res.status(200).json(proposal);
-    } catch (error: any) {
-      console.error("💥 ERRO REAL DO SEQUELIZE NO GET BY ID:", error);
-      return res.status(500).json({ error: error.message });
+    } catch (error) {
+      return ProposalController.handleError(res, error, 500);
     }
+  }
+
+  /**
+   * MÉTODOS PRIVADOS (TECH FORGE & CLEAN CODE)
+   */
+
+  private static async fetchVehicle(id: string): Promise<Vehicle> {
+    const vehicle = await Vehicle.findByPk(id);
+    if (!vehicle) throw new Error("Veículo não encontrado.|404");
+    return vehicle;
+  }
+
+  private static validateProposalRules(
+    v: Vehicle,
+    uid: string,
+    cash: number,
+    hasTrade: boolean,
+  ): void {
+    if (!hasTrade && cash <= 0)
+      throw new Error("Valor deve ser maior que zero sem troca.|400");
+    if (hasTrade && cash < 0)
+      throw new Error("Valor não pode ser negativo.|400");
+    if (v.userId === uid)
+      throw new Error("Não pode propor no seu próprio veículo.|400");
+    if (v.status !== "available")
+      throw new Error("Veículo indisponível para propostas.|400");
+  }
+
+  private static async validateTradeIn(
+    oid: string,
+    uid: string,
+  ): Promise<void> {
+    const offered = await Vehicle.findByPk(oid);
+    if (!offered || offered.userId !== uid)
+      throw new Error("O veículo de troca deve ser seu.|403");
+    if (offered.status !== "available")
+      throw new Error("Veículo de troca indisponível.|400");
+  }
+
+  private static async authorizeStatusUpdate(
+    id: string,
+    uid: string,
+    status: string,
+  ): Promise<Proposal> {
+    if (!["PENDING", "ACCEPTED", "REJECTED"].includes(status))
+      throw new Error("Status inválido.|400");
+    const p = await Proposal.findByPk(id, {
+      include: [{ model: Vehicle, as: "targetVehicle" }],
+    });
+    if (!p) throw new Error("Proposta não encontrada.|404");
+    if (p.targetVehicle?.userId !== uid)
+      throw new Error("Acesso negado: você não é o dono.|403");
+    return p;
+  }
+
+  private static handleError(
+    res: Response,
+    error: unknown,
+    defaultStatus: number,
+  ): Response {
+    const err = error as Error;
+    const [msg, status] = err.message.split("|");
+    return res
+      .status(status ? Number(status) : defaultStatus)
+      .json({ error: msg });
   }
 }

@@ -5,74 +5,68 @@ import VehicleImage from "../models/VehicleImage";
 import Vehicle from "../models/Vehicle";
 
 export default class VehicleImageController {
-  // POST: Adicionar uma foto a um veículo
-  static async upload(req: Request, res: Response) {
+  /**
+   * MÉTODOS PÚBLICOS (ORQUESTRADORES)
+   */
+
+  static async upload(req: Request, res: Response): Promise<Response> {
     try {
       const { vehicleId } = req.params;
+      if (!req.file) throw new Error("Nenhuma imagem foi enviada.|400");
 
-      if (!req.file) {
-        return res.status(400).json({ error: "Nenhuma imagem foi enviada." });
-      }
-
-      const vehicle = await Vehicle.findByPk(vehicleId as string);
-      if (!vehicle) {
-        return res.status(404).json({ error: "Veículo não encontrado." });
-      }
-
-      // Salvamos o caminho relativo para o João usar no Front
-      const image = await VehicleImage.create({
-        vehicleId,
-        url: `/uploads/${req.file.filename}`,
-      });
+      await VehicleImageController.checkVehicleExists(vehicleId as string);
+      const url = `/uploads/${req.file.filename}`;
+      const image = await VehicleImage.create({ vehicleId, url });
 
       return res.status(201).json(image);
-    } catch (error: any) {
-      return res
-        .status(500)
-        .json({ error: "Erro ao processar upload da imagem." });
+    } catch (error) {
+      return VehicleImageController.handleError(res, error as Error, 500);
     }
   }
 
-  // DELETE: Remover uma foto
-  static async delete(req: Request, res: Response) {
+  static async delete(req: Request, res: Response): Promise<Response> {
     try {
       const { imageId } = req.params;
+      const image = await VehicleImageController.fetchImage(imageId as string);
 
-      // 1. Busca a imagem no banco de dados
-      const image = await VehicleImage.findByPk(imageId as string);
-      if (!image) {
-        return res.status(404).json({ error: "Imagem não encontrada." });
-      }
-
-      // 2. Apaga o arquivo físico da pasta uploads
-      // A URL está salva como "/uploads/8f9a-foto.jpg". O .split('/').pop() pega só o "8f9a-foto.jpg"
-      const filename = image.url.split("/").pop();
-
-      if (filename) {
-        // Monta o caminho exato de onde o arquivo deveria estar no servidor
-        const filePath = path.resolve(
-          __dirname,
-          "..",
-          "..",
-          "uploads",
-          filename,
-        );
-
-        // Se o arquivo realmente existir na pasta, nós deletamos (unlinkSync)
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
-        }
-      }
-
-      // 3. Deleta o registro do banco de dados
+      VehicleImageController.removePhysicalFile(image.url);
       await image.destroy();
 
       return res.status(200).json({ message: "Imagem deletada com sucesso." });
-    } catch (error: any) {
-      console.error("Erro ao deletar imagem:", error);
-      return res
-        .status(500)
-        .json({ error: "Erro interno ao deletar a imagem." });
+    } catch (error) {
+      return VehicleImageController.handleError(res, error as Error, 500);
     }
+  }
+
+  /**
+   * MÉTODOS PRIVADOS (TECH FORGE & CLEAN CODE) - MÁXIMO 10 LINHAS CADA
+   */
+
+  private static async checkVehicleExists(id: string): Promise<void> {
+    const vehicle = await Vehicle.findByPk(id);
+    if (!vehicle) throw new Error("Veículo não encontrado.|404");
+  }
+
+  private static async fetchImage(id: string): Promise<VehicleImage> {
+    const image = await VehicleImage.findByPk(id);
+    if (!image) throw new Error("Imagem não encontrada.|404");
+    return image;
+  }
+
+  private static removePhysicalFile(url: string): void {
+    const filename = url.split("/").pop();
+    if (!filename) return;
+    const filePath = path.resolve(__dirname, "..", "..", "uploads", filename);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  }
+
+  private static handleError(
+    res: Response,
+    err: Error,
+    defStatus: number,
+  ): Response {
+    const [msg, status] = err.message.split("|");
+    const statusCode = status ? Number(status) : defStatus;
+    return res.status(statusCode).json({ error: msg });
   }
 }
