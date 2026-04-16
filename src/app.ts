@@ -9,12 +9,12 @@ import AuthRoutes from "./routes/AuthRoutes";
 const app = express();
 
 app.use(cors());
-app.use(express.json()); // Permite receber JSON do Front-end
+app.use(express.json());
 
 app.use("/uploads", express.static("uploads"));
 app.use("/auth", AuthRoutes);
 app.use("/users", UserRoutes);
-app.use("/vehicles", VehicleRoutes); // Agora este ficheiro gere tudo (veículos e imagens)
+app.use("/vehicles", VehicleRoutes);
 app.use("/proposals", ProposalRoutes);
 app.use("/reviews", ReviewRoutes);
 

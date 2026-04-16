@@ -10,10 +10,6 @@ import { AuthRequest } from "../middlewares/authMiddleware";
 import { IUser } from "../types";
 
 export default class UserController {
-  /**
-   * MÉTODOS PÚBLICOS (ORQUESTRADORES)
-   */
-
   static async create(req: Request, res: Response): Promise<Response> {
     try {
       const { name, email, password, cpf, birthDate, phone } = req.body;
@@ -91,13 +87,7 @@ export default class UserController {
     }
   }
 
-  /**
-   * MÉTODOS PRIVADOS (LÓGICA E VALIDAÇÕES) - MÁXIMO 10 LINHAS CADA
-   */
-
   private static validateRegisterData(data: IUser): void {
-    // Forçamos o tipo 'string' porque na Interface IUser eles são opcionais (?),
-    // mas para o cadastro eles são obrigatórios.
     const email = data.email as string;
     const password = data.password as string;
     const cpf = data.cpf as string;

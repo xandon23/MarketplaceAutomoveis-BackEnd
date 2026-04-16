@@ -22,21 +22,20 @@ export default class Proposal extends Model {
   declare id: string;
 
   @Column({ type: DataType.DECIMAL(10, 2), allowNull: false })
-  declare cashOffer: number; // Valor em dinheiro oferecido
+  declare cashOffer: number;
 
   @Column({
-    type: DataType.ENUM("PENDING", "ACCEPTED", "REJECTED"), // Padrão profissional
+    type: DataType.ENUM("PENDING", "ACCEPTED", "REJECTED"),
     defaultValue: "PENDING",
     allowNull: false,
   })
-  declare status: string; // O vendedor vai poder mudar isso depois
+  declare status: string;
 
   @Column({ type: DataType.TEXT, allowNull: true })
-  declare message: string; // Mensagem para o vendedor (ex: "Pago à vista se fechar hoje")
+  declare message: string;
 
   // --- RELACIONAMENTOS ---
 
-  // 1. Quem é o Comprador? (Chave Estrangeira para User)
   @ForeignKey(() => User)
   @Column({ type: DataType.UUID, allowNull: false })
   declare buyerId: string;
@@ -44,7 +43,6 @@ export default class Proposal extends Model {
   @BelongsTo(() => User, "buyerId")
   declare buyer: User;
 
-  // 2. Qual carro ele quer comprar? (Chave Estrangeira para Vehicle)
   @ForeignKey(() => Vehicle)
   @Column({ type: DataType.UUID, allowNull: false })
   declare targetVehicleId: string;
@@ -52,7 +50,6 @@ export default class Proposal extends Model {
   @BelongsTo(() => Vehicle, "targetVehicleId")
   declare targetVehicle: Vehicle;
 
-  // 3. Ele vai dar um carro na troca? (Chave Estrangeira Opcional para Vehicle)
   @ForeignKey(() => Vehicle)
   @Column({ type: DataType.UUID, allowNull: true })
   declare offeredVehicleId: string;

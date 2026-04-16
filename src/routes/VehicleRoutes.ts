@@ -8,19 +8,14 @@ import { authMiddleware } from "../middlewares/authMiddleware";
 const router = Router();
 const upload = multer(multerConfig);
 
-// === ROTAS PRINCIPAIS DE VEÍCULOS ===
-// PÚBLICAS
 router.get("/", VehicleController.getAll);
 router.get("/:id", VehicleController.getById);
 
-// PROTEGIDAS (Apenas utilizadores autenticados)
 router.post("/", authMiddleware, VehicleController.create);
 router.put("/:id", authMiddleware, VehicleController.update);
 router.delete("/:id", authMiddleware, VehicleController.delete);
-router.patch("/:id/sell", authMiddleware, VehicleController.sell); // Finalizar venda
+router.patch("/:id/sell", authMiddleware, VehicleController.sell);
 
-// === ROTAS DE IMAGENS DOS VEÍCULOS ===
-// PROTEGIDAS (Apenas utilizadores autenticados)
 router.post(
   "/:vehicleId/images",
   authMiddleware,

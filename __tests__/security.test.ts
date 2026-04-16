@@ -14,7 +14,6 @@ describe("Suite de Testes: Segurança e Autenticação", () => {
   const JWT_SECRET = process.env.JWT_SECRET || "SuaChaveSecretaSuperDificil123";
 
   beforeAll(async () => {
-    // Limpeza para evitar conflitos de CPF/Email
     await Vehicle.destroy({ where: {} });
     await User.destroy({ where: {} });
 
@@ -56,7 +55,6 @@ describe("Suite de Testes: Segurança e Autenticação", () => {
     veiculoAId = veiculo.id;
   });
 
-  // --- CRITÉRIO: AUTENTICAÇÃO ---
   it("🟢 [LOGIN] Deve logar com sucesso e retornar JWT", async () => {
     const res = await request(app).post("/auth/login").send({
       email: "a@test.com",
@@ -74,7 +72,6 @@ describe("Suite de Testes: Segurança e Autenticação", () => {
     expect(res.status).toBe(401);
   });
 
-  // --- CRITÉRIO: EDIÇÃO DE USUÁRIO ---
   it("🔴 [USER] Não deve permitir que um usuário edite outro", async () => {
     const res = await request(app)
       .put(`/users/${usuarioBId}`)
@@ -89,14 +86,11 @@ describe("Suite de Testes: Segurança e Autenticação", () => {
       .set("Authorization", `Bearer ${tokenUsuarioA}`)
       .send({ email: "novoemail@test.com", name: "Alexandre" });
 
-    // Verifica se o e-mail no banco continua o antigo
     const userCheck = await User.findByPk(usuarioAId);
     expect(userCheck?.email).toBe("a@test.com");
   });
 
-  // --- CRITÉRIO: SEGURANÇA DE RECURSOS (CRUD) ---
   it("🔴 [VEHICLE] Deve impedir que usuário B delete veículo do usuário A", async () => {
-    // Criar token para o B
     const tokenB = jwt.sign({ id: usuarioBId }, JWT_SECRET, {
       expiresIn: "1h",
     });

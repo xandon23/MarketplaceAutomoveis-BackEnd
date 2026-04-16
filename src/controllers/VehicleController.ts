@@ -6,12 +6,12 @@ import VehicleImage from "../models/VehicleImage";
 import sequelize from "../config/database";
 import Proposal from "../models/Proposal";
 import { Op } from "sequelize";
-import { IVehicle } from "../types"; // Regra 4: Importação Global
+import { IVehicle } from "../types";
 
 export default class VehicleController {
   static async create(req: AuthRequest, res: Response): Promise<Response> {
     try {
-      const data = req.body as IVehicle; // Regra 2: Casting do body
+      const data = req.body as IVehicle;
       VehicleController.validateVehicleData(data);
 
       const vehicle = await Vehicle.create({
@@ -43,12 +43,12 @@ export default class VehicleController {
         include: [
           {
             model: User,
-            as: "user", // ou "User", dependendo de como você definiu a associação no model
+            as: "user",
             attributes: ["name", "email"],
           },
           {
             model: VehicleImage,
-            as: "images", // Deve ser exatamente o mesmo nome que você definiu na associação
+            as: "images",
             attributes: ["id", "url"],
           },
         ],

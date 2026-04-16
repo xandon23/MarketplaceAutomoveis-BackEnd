@@ -4,19 +4,18 @@ import Proposal from "../models/Proposal";
 import User from "../models/User";
 import Vehicle from "../models/Vehicle";
 import VehicleImage from "../models/VehicleImage";
-import { IProposal, IVehicle } from "../types"; // Regra 4: Importação
+import { IProposal, IVehicle } from "../types";
 
 export default class ProposalController {
   static async create(req: AuthRequest, res: Response): Promise<Response> {
     try {
-      const userId = req.userId as string; // Casting direto para tipo primitivo
+      const userId = req.userId as string;
       const data = req.body as IProposal;
 
       const vModel = await ProposalController.fetchVehicle(
         data.targetVehicleId as string,
       );
 
-      // A solução "Nota 10": Extraímos os dados puros do Model para bater com a Interface
       const vehicle = vModel.get({ plain: true }) as IVehicle;
 
       ProposalController.validateProposalRules(vehicle, userId, data);
@@ -38,7 +37,6 @@ export default class ProposalController {
 
       return res.status(201).json({ message: "Proposta enviada!", proposal });
     } catch (error) {
-      // Regra da rubrica: Tipagem da exceção como Error
       const err = error as Error;
       return ProposalController.handleError(res, err, 400);
     }

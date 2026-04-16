@@ -4,16 +4,12 @@ import Review from "../models/Review";
 import User from "../models/User";
 import Vehicle from "../models/Vehicle";
 import { Op } from "sequelize";
-import { IReview } from "../types"; // Regra 4: Importação correta
+import { IReview } from "../types";
 
 export default class ReviewController {
-  /**
-   * MÉTODOS PÚBLICOS (ORQUESTRADORES)
-   */
-
   static async create(req: AuthRequest, res: Response): Promise<Response> {
     try {
-      const data = req.body as IReview; // Regra 1 e 3: Tipagem e Proteção
+      const data = req.body as IReview;
       const reviewerId = req.userId as string;
 
       ReviewController.validateBasicRules(reviewerId, data);
@@ -50,12 +46,8 @@ export default class ReviewController {
     }
   }
 
-  /**
-   * MÉTODOS PRIVADOS (REGRAS TECH FORGE) - MÁXIMO 10 LINHAS CADA
-   */
-
   private static validateBasicRules(revId: string, data: IReview): void {
-    const targetId = data.reviewedId as string; // Regra 2: Casting de opcionais
+    const targetId = data.reviewedId as string;
     const rating = data.rating as number;
 
     if (!revId) throw new Error("Usuário não autenticado.|401");

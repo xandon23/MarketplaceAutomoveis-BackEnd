@@ -1,5 +1,3 @@
-// src/types/index.ts
-
 export interface IUser {
   id?: string;
   name: string;

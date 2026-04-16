@@ -7,7 +7,7 @@ import {
   BeforeCreate,
   BeforeSave,
 } from "sequelize-typescript";
-import bcrypt from "bcryptjs"; // <-- Importamos o mestre da criptografia
+import bcrypt from "bcryptjs";
 import Vehicle from "./Vehicle";
 import Proposal from "./Proposal";
 import Review from "./Review";
@@ -39,15 +39,13 @@ export default class User extends Model {
   @Column({ type: DataType.DATEONLY, allowNull: false })
   declare birthDate: string;
 
-  @Column({ type: DataType.STRING, allowNull: false, unique: true }) // Garante que o banco nunca aceite dois CPFs iguais
+  @Column({ type: DataType.STRING, allowNull: false, unique: true })
   declare cpf: string;
 
-  // --- O "PEDÁGIO" DE SEGURANÇA (HOOK) ---
-  @BeforeSave // Executa antes de Criar (POST) e antes de Atualizar (PUT)
+  @BeforeSave
   static async hashPassword(instance: User) {
-    // Só criptografa se a senha foi alterada ou é nova
     if (instance.changed("password")) {
-      const salt = await bcrypt.genSalt(10); // Gera um "tempero" aleatório para a senha
+      const salt = await bcrypt.genSalt(10);
       instance.password = await bcrypt.hash(instance.password, salt);
     }
   }

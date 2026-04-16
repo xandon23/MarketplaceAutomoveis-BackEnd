@@ -3,13 +3,9 @@ import path from "path";
 import { Request, Response } from "express";
 import VehicleImage from "../models/VehicleImage";
 import Vehicle from "../models/Vehicle";
-import { IVehicleImage } from "../types"; // Regra 4: Importação Global
+import { IVehicleImage } from "../types";
 
 export default class VehicleImageController {
-  /**
-   * MÉTODOS PÚBLICOS (ORQUESTRADORES)
-   */
-
   static async upload(req: Request, res: Response): Promise<Response> {
     try {
       const { vehicleId } = req.params;
@@ -38,10 +34,6 @@ export default class VehicleImageController {
       return VehicleImageController.handleError(res, error as Error, 500);
     }
   }
-
-  /**
-   * MÉTODOS PRIVADOS (TECH FORGE & CLEAN CODE) - MÁXIMO 10 LINHAS CADA
-   */
 
   private static async checkVehicleExists(id: string): Promise<void> {
     const vehicle = await Vehicle.findByPk(id);
