@@ -6,7 +6,7 @@ const port = 3333;
 
 // Sincroniza o banco e só depois inicia o servidor
 sequelize
-  .sync({ alter: true })
+  .sync()
   .then(() => {
     app.listen(port, () => {
       console.log(`🚀 Servidor rodando em http://localhost:${port}`);

@@ -3,6 +3,7 @@ import { AuthRequest } from "../middlewares/authMiddleware";
 import Proposal from "../models/Proposal";
 import User from "../models/User";
 import Vehicle from "../models/Vehicle";
+import VehicleImage from "../models/VehicleImage";
 
 export default class ProposalController {
   static async create(req: AuthRequest, res: Response): Promise<Response> {
@@ -76,6 +77,7 @@ export default class ProposalController {
         cashOffer,
         offeredVehicleId: offeredVehicleId || null, // Salva o ID do carro de troca (ou nulo se for só dinheiro)
         status: "pending", // Toda proposta nasce como 'pendente'
+        message: req.body.message || null, // Mensagem opcional para o vendedor (ex: "Pago à vista se fechar hoje")
       });
 
       return res.status(201).json({
@@ -101,9 +103,9 @@ export default class ProposalController {
       const loggedUserId = req.userId;
 
       // Apenas permitimos esses dois status manuais nesta rota
-      if (!["PENDING", "REJECTED"].includes(status)) {
+      if (!["PENDING", "ACCEPTED", "REJECTED"].includes(status)) {
         return res.status(400).json({
-          error: "Status inválido. Use 'PENDING' ou 'REJECTED'.",
+          error: "Status inválido. Use 'PENDING', 'ACCEPTED' ou 'REJECTED'.",
         });
       }
 
@@ -157,11 +159,50 @@ export default class ProposalController {
       }
       const proposals = await Proposal.findAll({
         where: { targetVehicleId: targetVehicleId },
-        include: [{ model: User, as: "buyer", attributes: ["name", "phone"] }],
+        include: [
+          { model: User, as: "buyer", attributes: ["name", "phone"] },
+          { model: Vehicle, as: "offeredVehicle" },
+        ],
       });
       return res.status(200).json(proposals);
     } catch (error: any) {
       console.error("💥 ERRO REAL DO SEQUELIZE NO GET:", error);
+      return res.status(500).json({ error: error.message });
+    }
+  }
+
+  // GET: Buscar os detalhes de uma única proposta pelo ID
+  static async getById(req: AuthRequest, res: Response): Promise<Response> {
+    try {
+      // Confirme se no seu arquivo de rotas o parâmetro chama ':id' (ex: router.get('/:id', ...))
+      const proposalId = req.params.id;
+
+      if (!proposalId) {
+        return res
+          .status(400)
+          .json({ error: "ID da proposta não foi fornecido na rota." });
+      }
+
+      const proposal = await Proposal.findByPk(String(proposalId), {
+        include: [
+          { model: User, as: "buyer", attributes: ["name", "phone", "email"] },
+          {
+            model: Vehicle,
+            as: "offeredVehicle",
+            include: [
+              { model: VehicleImage, as: "images" }, // 👈 A MÁGICA ESTÁ AQUI! Traz as fotos junto.
+            ],
+          },
+        ],
+      });
+
+      if (!proposal) {
+        return res.status(404).json({ error: "Proposta não encontrada." });
+      }
+
+      return res.status(200).json(proposal);
+    } catch (error: any) {
+      console.error("💥 ERRO REAL DO SEQUELIZE NO GET BY ID:", error);
       return res.status(500).json({ error: error.message });
     }
   }

@@ -16,4 +16,7 @@ router.put("/:id/status", authMiddleware, ProposalController.updateStatus);
 // PATCH é o método ideal para atualizar apenas um campo (o status)
 router.patch("/:id/status", authMiddleware, ProposalController.updateStatus);
 
+// Deve ficar parecido com isso no seu arquivo de rotas:
+router.get("/:id", authMiddleware, ProposalController.getById);
+
 export default router;

@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import User from "../models/User";
 import { validarCPF } from "../utils/validators";
+import { AuthRequest } from "../middlewares/authMiddleware";
 
 export default class UserController {
   // POST: Criar um novo utilizador
@@ -102,16 +103,52 @@ export default class UserController {
   }
 
   // PUT: Atualizar dados do utilizador
-  static async update(req: Request, res: Response): Promise<Response> {
+  static async update(req: AuthRequest, res: Response): Promise<Response> {
     try {
-      const user = await User.findByPk(req.params.id as string);
-      if (!user)
-        return res.status(404).json({ error: "Utilizador não encontrado" });
+      const userIdFromToken = req.userId; // Vem do token (quem está logado)
+      const userIdFromUrl = req.params.id as string; // Vem da URL (quem ele quer editar)
 
-      await user.update(req.body);
-      return res
-        .status(200)
-        .json({ message: "Dados atualizados com sucesso!" });
+      // 1. REGRA: Só pode editar o próprio usuário
+      if (userIdFromToken !== userIdFromUrl) {
+        return res.status(403).json({
+          error: "Operação negada: Você só pode editar o seu próprio perfil.",
+        });
+      }
+
+      const user = await User.findByPk(userIdFromUrl);
+      if (!user) {
+        return res.status(404).json({ error: "Utilizador não encontrado" });
+      }
+
+      // Desestruturamos apenas o que o front-end costuma enviar na edição
+      const { name, phone, email } = req.body;
+
+      // 2. REGRA: Garantir que todos os campos obrigatórios da edição estão presentes
+      if (!name || !phone) {
+        return res
+          .status(400)
+          .json({ error: "Nome e telefone são campos obrigatórios." });
+      }
+
+      // 3. REGRA: Não permitir que o usuário altere o e-mail
+      // Se ele enviou um e-mail na requisição e for diferente do que está no banco, nós barramos!
+      if (email && email !== user.email) {
+        return res.status(403).json({
+          error:
+            "Operação negada: Não é permitido alterar o endereço de e-mail.",
+        });
+      }
+
+      // Atualizamos de forma segura APENAS os campos permitidos (ignoramos o email e cpf)
+      await user.update({
+        name,
+        phone,
+      });
+
+      return res.status(200).json({
+        message: "Dados atualizados com sucesso!",
+        user: { name: user.name, phone: user.phone, email: user.email }, // Devolvemos os dados seguros
+      });
     } catch (error: any) {
       return res.status(400).json({ error: error.message });
     }

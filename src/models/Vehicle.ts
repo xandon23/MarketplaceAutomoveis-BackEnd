@@ -83,6 +83,16 @@ export default class Vehicle extends Model {
   @Column({ type: DataType.UUID, allowNull: false })
   declare userId: string;
 
+  @ForeignKey(() => User)
+  @Column({
+    type: DataType.UUID,
+    allowNull: true, // 👈 Importante: começa vazio (null) até ser vendido
+  })
+  declare buyerId: string;
+
+  @BelongsTo(() => User, { foreignKey: "buyerId", as: "Buyer" }) // 👈 O "as" que faltava!
+  declare Buyer: User;
+
   @BelongsTo(() => User)
   declare user: User;
 

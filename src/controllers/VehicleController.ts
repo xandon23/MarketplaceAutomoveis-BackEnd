@@ -5,6 +5,7 @@ import User from "../models/User";
 import VehicleImage from "../models/VehicleImage";
 import sequelize from "../config/database";
 import Proposal from "../models/Proposal";
+import { Op } from "sequelize";
 
 export default class VehicleController {
   static async create(req: AuthRequest, res: Response): Promise<Response> {
@@ -87,23 +88,35 @@ export default class VehicleController {
   // GET: A Vitrine Completa (Carro + Vendedor + Galeria de Fotos)
   static async getAll(req: Request, res: Response): Promise<Response> {
     try {
-      // 1. Configuração da Paginação (Captura da URL ou usa padrão)
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 10;
       const offset = (page - 1) * limit;
 
-      // 2. Busca paginada com Eager Loading (incluindo Fotos e Usuário)
+      const { includeSold } = req.query;
+      const whereCondition: any = {};
+
+      // Se NÃO vier '?includeSold=true' na URL, escondemos os vendidos da vitrine
+      if (includeSold !== "true") {
+        whereCondition.status = { [Op.ne]: "sold" };
+      }
+
       const { count, rows } = await Vehicle.findAndCountAll({
+        where: whereCondition, // <--- Agora usamos a condição variável
         limit,
         offset,
-        order: [["createdAt", "DESC"]], // Ordem decrescente (mais novos primeiro)
+        order: [["createdAt", "DESC"]],
         include: [
-          { model: User, attributes: ["name", "email"] },
-          { model: VehicleImage, attributes: ["id", "url"] },
+          // 1. O dono do veículo (Precisamos avisar que o apelido dele é 'user')
+          { model: User, as: "user", attributes: ["name", "email"] },
+
+          // 2. O comprador do veículo (Já havíamos colocado o apelido 'Buyer')
+          { model: User, as: "Buyer", attributes: ["name"] },
+
+          // 3. As imagens
+          { model: VehicleImage, attributes: ["id", "url"], as: "images" },
         ],
       });
 
-      // 3. Retorno com metadados (O João vai precisar disso para criar os botões de "Próxima Página")
       return res.status(200).json({
         total: count,
         totalPages: Math.ceil(count / limit),
@@ -120,8 +133,14 @@ export default class VehicleController {
     try {
       const vehicle = await Vehicle.findByPk(req.params.id as string, {
         include: [
-          { model: User, attributes: ["name", "email"] },
-          { model: VehicleImage, attributes: ["id", "url"] }, // <-- 3. E aqui também!
+          // Avisa que o dono se chama 'user'
+          { model: User, as: "user", attributes: ["name", "email", "phone"] }, // adicione phone se precisar na página do anúncio
+
+          // Avisa que o comprador se chama 'Buyer'
+          { model: User, as: "Buyer", attributes: ["name"] },
+
+          // As imagens
+          { model: VehicleImage, attributes: ["id", "url"], as: "images" },
         ],
       });
       if (!vehicle)
@@ -193,7 +212,7 @@ export default class VehicleController {
 
     try {
       const { id } = req.params; // ID do Veículo
-      const { winningProposalId } = req.body; // ID da proposta que ganhou
+      const { buyerId } = req.body; // ID do comprador
       console.log("💥 DADOS QUE CHEGARAM:", req.body);
       const loggedUserId = req.userId;
 
@@ -219,14 +238,22 @@ export default class VehicleController {
       // --- INÍCIO DA MÁGICA DA TRANSAÇÃO ---
 
       // A) Marca o veículo como vendido
-      await vehicle.update({ status: "sold" }, { transaction });
+      await vehicle.update(
+        {
+          status: "sold",
+          buyerId: buyerId, // 👈 Salve o ID do comprador no registro do veículo
+        },
+        { transaction },
+      );
 
       // B) Marca a proposta vencedora como 'ACCEPTED' (ganha/concluída)
       const [linhasAtualizadas] = await Proposal.update(
         { status: "ACCEPTED" },
         {
           where: {
-            id: winningProposalId, // 👈 Simplificamos! Apenas o ID direto, sem conversão.
+            targetVehicleId: id, // O carro que está sendo vendido
+            buyerId: buyerId, // O comprador escolhido
+            status: "ACCEPTED", // Garante que estamos afetando a proposta certa
           },
           transaction, // Mantenha isso se você abriu a transação lá em cima
         },
@@ -241,7 +268,7 @@ export default class VehicleController {
         {
           where: {
             targetVehicleId: id,
-            id: { [Op.ne]: String(winningProposalId) }, // [Op.ne] significa "Not Equal" (Diferente de)
+            buyerId: { [Op.ne]: buyerId }, // [Op.ne] significa "Not Equal" (Diferente de)
             status: { [Op.in]: ["pending", "in_negotiation"] }, // Só recusa as que estavam abertas
           },
           transaction,

@@ -4,6 +4,7 @@ import Review from "../models/Review";
 import User from "../models/User";
 import Proposal from "../models/Proposal";
 import Vehicle from "../models/Vehicle";
+import { Op } from "sequelize";
 
 export default class ReviewController {
   static async create(req: AuthRequest, res: Response): Promise<Response> {
@@ -44,41 +45,25 @@ export default class ReviewController {
       }
 
       // --- 2. REGRA DE NEGÓCIO DE OURO: Validação de Negócio Fechado ---
-      let hasClosedDeal = false;
+      // Busca se existe algum veículo vendido que ligue essas duas pessoas
+      const closedDeal = await Vehicle.findOne({
+        where: {
+          status: "sold", // O carro precisa estar vendido
+          [Op.or]: [
+            // Cenário A: O Avaliador (reviewerId) comprou do Avaliado (reviewedId)
+            { buyerId: reviewerId, userId: reviewedId },
 
-      // Cenário A: O Avaliador foi quem COMPROU o carro do Avaliado
-      const buyerProposals = await Proposal.findAll({
-        where: { buyerId: reviewerId, status: "Aceita" },
+            // Cenário B: O Avaliador (reviewerId) vendeu para o Avaliado (reviewedId)
+            { userId: reviewerId, buyerId: reviewedId },
+          ],
+        },
       });
 
-      for (const prop of buyerProposals) {
-        const vehicle = await Vehicle.findByPk(prop.targetVehicleId);
-        if (vehicle && vehicle.userId === reviewedId) {
-          hasClosedDeal = true;
-          break; // Encontrou um negócio, pode parar de procurar
-        }
-      }
-
-      // Cenário B: O Avaliador foi quem VENDEU o carro para o Avaliado
-      if (!hasClosedDeal) {
-        const sellerProposals = await Proposal.findAll({
-          where: { buyerId: reviewedId, status: "Aceita" },
-        });
-
-        for (const prop of sellerProposals) {
-          const vehicle = await Vehicle.findByPk(prop.targetVehicleId);
-          if (vehicle && vehicle.userId === reviewerId) {
-            hasClosedDeal = true;
-            break;
-          }
-        }
-      }
-
-      // Se não encontrou nenhum negócio aceite entre os dois, barra a avaliação!
-      if (!hasClosedDeal) {
+      // Se não encontrou nenhum negócio fechado entre os dois, barra a avaliação!
+      if (!closedDeal) {
         return res.status(403).json({
           error:
-            "Operação negada: Só pode avaliar utilizadores com os quais tenha um negócio fechado (Proposta Aceita).",
+            "Operação negada: Só pode avaliar utilizadores com os quais tenha um negócio fechado.",
         });
       }
       // ----------------------------------------------------------------
