@@ -1,7 +1,13 @@
 import { Request, Response } from "express";
 import User from "../models/User";
-import { validarCPF } from "../utils/validators";
+import {
+  validarCPF,
+  validarEmail,
+  validarSenhaForte,
+  isMaiorDeIdade,
+} from "../utils/validators";
 import { AuthRequest } from "../middlewares/authMiddleware";
+import { IUser } from "../types";
 
 export default class UserController {
   /**
@@ -89,24 +95,18 @@ export default class UserController {
    * MÉTODOS PRIVADOS (LÓGICA E VALIDAÇÕES) - MÁXIMO 10 LINHAS CADA
    */
 
-  private static validateRegisterData(data: any): void {
-    const { email, password, cpf, birthDate } = data;
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-      throw new Error("E-mail inválido");
-    if (!/^(?=.*[A-Za-z])(?=.*\d).{8,}$/.test(password))
-      throw new Error("Senha fraca");
-    if (!validarCPF(cpf)) throw new Error("CPF inválido");
-    if (!UserController.isOfAge(birthDate))
-      throw new Error("Menor de idade|403");
-  }
+  private static validateRegisterData(data: IUser): void {
+    // Forçamos o tipo 'string' porque na Interface IUser eles são opcionais (?),
+    // mas para o cadastro eles são obrigatórios.
+    const email = data.email as string;
+    const password = data.password as string;
+    const cpf = data.cpf as string;
+    const birthDate = data.birthDate as string;
 
-  private static isOfAge(birthDate: string): boolean {
-    const dataNasc = new Date(birthDate);
-    const hoje = new Date();
-    let idade = hoje.getFullYear() - dataNasc.getFullYear();
-    const m = hoje.getMonth() - dataNasc.getMonth();
-    if (m < 0 || (m === 0 && hoje.getDate() < dataNasc.getDate())) idade--;
-    return idade >= 18;
+    if (!validarEmail(email)) throw new Error("E-mail inválido|400");
+    if (!validarSenhaForte(password)) throw new Error("Senha fraca|400");
+    if (!validarCPF(cpf)) throw new Error("CPF inválido|400");
+    if (!isMaiorDeIdade(birthDate)) throw new Error("Menor de idade|403");
   }
 
   private static async checkDuplicity(

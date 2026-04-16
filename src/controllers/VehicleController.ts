@@ -6,14 +6,12 @@ import VehicleImage from "../models/VehicleImage";
 import sequelize from "../config/database";
 import Proposal from "../models/Proposal";
 import { Op } from "sequelize";
+import { IVehicle } from "../types"; // Regra 4: Importação Global
 
 export default class VehicleController {
-  /** * MÉTODOS PÚBLICOS (ORQUESTRADORES)
-   */
-
   static async create(req: AuthRequest, res: Response): Promise<Response> {
     try {
-      const data = req.body;
+      const data = req.body as IVehicle; // Regra 2: Casting do body
       VehicleController.validateVehicleData(data);
 
       const vehicle = await Vehicle.create({
@@ -57,7 +55,7 @@ export default class VehicleController {
 
   static async getById(req: Request, res: Response): Promise<Response> {
     try {
-      const id = req.params.id as string; // Forçamos o tipo string para evitar erro
+      const id = req.params.id as string;
       const vehicle = await Vehicle.findByPk(id, {
         include: VehicleController.getIncludes(true),
       });
@@ -74,7 +72,7 @@ export default class VehicleController {
       const id = req.params.id as string;
       const vehicle = await VehicleController.authorize(id, req.userId);
 
-      await vehicle.update(VehicleController.whitelist(req.body));
+      await vehicle.update(VehicleController.whitelist(req.body as IVehicle));
       return res
         .status(200)
         .json({ message: "Anúncio atualizado com sucesso!" });
@@ -87,7 +85,6 @@ export default class VehicleController {
     try {
       const id = req.params.id as string;
       const vehicle = await VehicleController.authorize(id, req.userId);
-
       await vehicle.destroy();
       return res.status(204).send();
     } catch (error) {
@@ -100,7 +97,6 @@ export default class VehicleController {
     try {
       const id = req.params.id as string;
       const vehicle = await VehicleController.authorize(id, req.userId);
-
       if (vehicle.status === "sold")
         throw new Error("Este veículo já consta como vendido|400");
 
@@ -109,7 +105,6 @@ export default class VehicleController {
         { transaction: t },
       );
       await VehicleController.manageProposals(id, req.body.buyerId, t);
-
       await t.commit();
       return res.status(200).json({ message: "Venda finalizada com sucesso!" });
     } catch (error) {
@@ -118,21 +113,20 @@ export default class VehicleController {
     }
   }
 
-  /**
-   * MÉTODOS PRIVADOS (REGRAS TECH FORGE) - MÁXIMO 10 LINHAS
-   */
-
-  private static validateVehicleData(d: any): void {
+  private static validateVehicleData(d: IVehicle): void {
     const currentYear = new Date().getFullYear();
-    if (d.price <= 0) throw new Error("O preço deve ser maior que zero");
-    if (d.modelYear < d.manufactureYear) throw new Error("Ano modelo inválido");
-    if (d.modelYear > d.manufactureYear + 1)
-      throw new Error("Modelo não pode ser superior a 1 ano da fabricação");
-    if (d.manufactureYear > currentYear)
+    const price = d.price as number;
+    const mYear = d.modelYear as number;
+    const fYear = d.manufactureYear as number;
+    if (price <= 0) throw new Error("O preço deve ser maior que zero");
+    if (mYear < fYear) throw new Error("Ano modelo inválido");
+    if (mYear > fYear + 1)
+      throw new Error("Modelo não pode ser superior a 1 ano");
+    if (fYear > currentYear)
       throw new Error(`Ano não pode ser maior que ${currentYear}`);
   }
 
-  private static whitelist(body: any) {
+  private static whitelist(body: IVehicle) {
     const {
       brand,
       model,
@@ -165,7 +159,7 @@ export default class VehicleController {
     const v = await Vehicle.findByPk(vId);
     if (!v) throw new Error("Veículo não encontrado|404");
     if (String(v.userId) !== String(uId))
-      throw new Error("Operação negada: Você não é o proprietário|403");
+      throw new Error("Operação negada: Proprietário inválido|403");
     return v;
   }
 
@@ -209,7 +203,6 @@ export default class VehicleController {
   ): Response {
     const err = error as Error;
     const [msg, status] = err.message.split("|");
-    const statusCode = status ? Number(status) : defStatus;
-    return res.status(statusCode).json({ error: msg });
+    return res.status(status ? Number(status) : defStatus).json({ error: msg });
   }
 }

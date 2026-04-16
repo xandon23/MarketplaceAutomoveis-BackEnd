@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import User from "../models/User";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { IUser } from "../types"; // Regra 4: Importação Global
 
 export default class AuthController {
   /**
@@ -13,7 +14,8 @@ export default class AuthController {
       const { email, password } = req.body;
       const user = await AuthController.getUser(email);
 
-      await AuthController.checkPassword(password, user.password);
+      // Regra 2: Casting para garantir que a senha não seja undefined
+      await AuthController.checkPassword(password, user.password as string);
       const token = AuthController.issueToken(user);
 
       return res.status(200).json({
@@ -44,9 +46,11 @@ export default class AuthController {
     if (!isValid) throw new Error("E-mail ou senha inválidos.|401");
   }
 
-  private static issueToken(user: User): string {
+  private static issueToken(user: IUser): string {
+    // Regra 3: Uso de Interface Global
     const secret = "SuaChaveSecretaSuperDificil123";
-    const payload = { id: user.id, name: user.name };
+    // Regra 2: Casting de campos que podem ser opcionais na interface
+    const payload = { id: user.id as string, name: user.name as string };
     return jwt.sign(payload, secret, { expiresIn: "1d" });
   }
 

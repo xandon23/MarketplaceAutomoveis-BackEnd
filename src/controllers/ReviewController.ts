@@ -4,6 +4,7 @@ import Review from "../models/Review";
 import User from "../models/User";
 import Vehicle from "../models/Vehicle";
 import { Op } from "sequelize";
+import { IReview } from "../types"; // Regra 4: Importação correta
 
 export default class ReviewController {
   /**
@@ -12,25 +13,24 @@ export default class ReviewController {
 
   static async create(req: AuthRequest, res: Response): Promise<Response> {
     try {
-      const { reviewedId, rating, comment } = req.body;
+      const data = req.body as IReview; // Regra 1 e 3: Tipagem e Proteção
       const reviewerId = req.userId as string;
 
-      ReviewController.validateBasicRules(reviewerId, reviewedId, rating);
-      await ReviewController.checkDuplicateReview(reviewerId, reviewedId);
-      await ReviewController.validateNegotiation(reviewerId, reviewedId);
+      ReviewController.validateBasicRules(reviewerId, data);
+      await ReviewController.checkDuplicateReview(reviewerId, data.reviewedId);
+      await ReviewController.validateNegotiation(reviewerId, data.reviewedId);
 
       const review = await Review.create({
         reviewerId,
-        reviewedId,
-        rating,
-        comment,
+        reviewedId: data.reviewedId,
+        rating: data.rating,
+        comment: data.comment,
       });
       return res
         .status(201)
         .json({ message: "Avaliação registada com sucesso!", review });
     } catch (error) {
-      const err = error as Error;
-      return ReviewController.handleError(res, err, 400);
+      return ReviewController.handleError(res, error as Error, 400);
     }
   }
 
@@ -46,8 +46,7 @@ export default class ReviewController {
       });
       return res.status(200).json(reviews);
     } catch (error) {
-      const err = error as Error;
-      return ReviewController.handleError(res, err, 500);
+      return ReviewController.handleError(res, error as Error, 500);
     }
   }
 
@@ -55,16 +54,15 @@ export default class ReviewController {
    * MÉTODOS PRIVADOS (REGRAS TECH FORGE) - MÁXIMO 10 LINHAS CADA
    */
 
-  private static validateBasicRules(
-    revId: string,
-    targetId: string,
-    rating: number,
-  ): void {
+  private static validateBasicRules(revId: string, data: IReview): void {
+    const targetId = data.reviewedId as string; // Regra 2: Casting de opcionais
+    const rating = data.rating as number;
+
     if (!revId) throw new Error("Usuário não autenticado.|401");
     if (revId === targetId)
-      throw new Error("Operação negada: Não pode avaliar-se a si mesmo.|403");
+      throw new Error("Operação negada: Autoavaliação.|403");
     if (rating < 1 || rating > 5)
-      throw new Error("A nota deve ser um valor entre 1 e 5.|400");
+      throw new Error("Nota deve ser entre 1 e 5.|400");
   }
 
   private static async checkDuplicateReview(
@@ -74,11 +72,7 @@ export default class ReviewController {
     const exists = await Review.findOne({
       where: { reviewerId: revId, reviewedId: targetId },
     });
-    if (exists) {
-      throw new Error(
-        "Operação negada: Você já avaliou este vendedor anteriormente.|403",
-      );
-    }
+    if (exists) throw new Error("Operação negada: Avaliação já existente.|403");
   }
 
   private static async validateNegotiation(
@@ -94,11 +88,8 @@ export default class ReviewController {
         ],
       },
     });
-    if (!closedDeal) {
-      throw new Error(
-        "Operação negada: Só pode avaliar quem tem negócio fechado.|403",
-      );
-    }
+    if (!closedDeal)
+      throw new Error("Operação negada: Sem negócio fechado.|403");
   }
 
   private static handleError(

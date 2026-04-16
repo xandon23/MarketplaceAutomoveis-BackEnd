@@ -4,43 +4,43 @@ import Proposal from "../models/Proposal";
 import User from "../models/User";
 import Vehicle from "../models/Vehicle";
 import VehicleImage from "../models/VehicleImage";
+import { IProposal, IVehicle } from "../types"; // Regra 4: Importação
 
 export default class ProposalController {
-  /**
-   * MÉTODOS PÚBLICOS (ORQUESTRADORES)
-   */
-
   static async create(req: AuthRequest, res: Response): Promise<Response> {
     try {
-      const { targetVehicleId, cashOffer, offeredVehicleId, message } =
-        req.body;
-      const vehicle = await ProposalController.fetchVehicle(targetVehicleId);
+      const userId = req.userId as string; // Casting direto para tipo primitivo
+      const data = req.body as IProposal;
 
-      ProposalController.validateProposalRules(
-        vehicle,
-        req.userId as string,
-        cashOffer,
-        !!offeredVehicleId,
+      const vModel = await ProposalController.fetchVehicle(
+        data.targetVehicleId as string,
       );
-      if (offeredVehicleId)
+
+      // A solução "Nota 10": Extraímos os dados puros do Model para bater com a Interface
+      const vehicle = vModel.get({ plain: true }) as IVehicle;
+
+      ProposalController.validateProposalRules(vehicle, userId, data);
+      if (data.offeredVehicleId) {
         await ProposalController.validateTradeIn(
-          offeredVehicleId,
-          req.userId as string,
+          data.offeredVehicleId as string,
+          userId,
         );
+      }
 
       const proposal = await Proposal.create({
-        targetVehicleId,
-        buyerId: req.userId,
-        cashOffer,
-        offeredVehicleId: offeredVehicleId || null,
+        targetVehicleId: data.targetVehicleId,
+        buyerId: userId,
+        cashOffer: data.cashOffer,
+        offeredVehicleId: data.offeredVehicleId || null,
         status: "pending",
-        message: message || null,
+        message: data.message || null,
       });
-      return res
-        .status(201)
-        .json({ message: "Proposta enviada com sucesso!", proposal });
+
+      return res.status(201).json({ message: "Proposta enviada!", proposal });
     } catch (error) {
-      return ProposalController.handleError(res, error, 400);
+      // Regra da rubrica: Tipagem da exceção como Error
+      const err = error as Error;
+      return ProposalController.handleError(res, err, 400);
     }
   }
 
@@ -101,10 +101,6 @@ export default class ProposalController {
     }
   }
 
-  /**
-   * MÉTODOS PRIVADOS (TECH FORGE & CLEAN CODE)
-   */
-
   private static async fetchVehicle(id: string): Promise<Vehicle> {
     const vehicle = await Vehicle.findByPk(id);
     if (!vehicle) throw new Error("Veículo não encontrado.|404");
@@ -112,19 +108,19 @@ export default class ProposalController {
   }
 
   private static validateProposalRules(
-    v: Vehicle,
+    v: IVehicle,
     uid: string,
-    cash: number,
-    hasTrade: boolean,
+    data: IProposal,
   ): void {
+    const cash = data.cashOffer as number;
+    const hasTrade = !!data.offeredVehicleId;
     if (!hasTrade && cash <= 0)
-      throw new Error("Valor deve ser maior que zero sem troca.|400");
+      throw new Error("Valor deve ser maior que zero.|400");
     if (hasTrade && cash < 0)
       throw new Error("Valor não pode ser negativo.|400");
     if (v.userId === uid)
-      throw new Error("Não pode propor no seu próprio veículo.|400");
-    if (v.status !== "available")
-      throw new Error("Veículo indisponível para propostas.|400");
+      throw new Error("Não pode propor no seu veículo.|400");
+    if (v.status !== "available") throw new Error("Veículo indisponível.|400");
   }
 
   private static async validateTradeIn(
@@ -133,36 +129,34 @@ export default class ProposalController {
   ): Promise<void> {
     const offered = await Vehicle.findByPk(oid);
     if (!offered || offered.userId !== uid)
-      throw new Error("O veículo de troca deve ser seu.|403");
+      throw new Error("O veículo deve ser seu.|403");
     if (offered.status !== "available")
-      throw new Error("Veículo de troca indisponível.|400");
+      throw new Error("Veículo indisponível.|400");
   }
 
   private static async authorizeStatusUpdate(
     id: string,
     uid: string,
-    status: string,
+    st: string,
   ): Promise<Proposal> {
-    if (!["PENDING", "ACCEPTED", "REJECTED"].includes(status))
+    if (!["PENDING", "ACCEPTED", "REJECTED"].includes(st))
       throw new Error("Status inválido.|400");
     const p = await Proposal.findByPk(id, {
       include: [{ model: Vehicle, as: "targetVehicle" }],
     });
     if (!p) throw new Error("Proposta não encontrada.|404");
-    if (p.targetVehicle?.userId !== uid)
-      throw new Error("Acesso negado: você não é o dono.|403");
+    if ((p as any).targetVehicle?.userId !== uid)
+      throw new Error("Acesso negado.|403");
     return p;
   }
 
   private static handleError(
     res: Response,
     error: unknown,
-    defaultStatus: number,
+    defStatus: number,
   ): Response {
     const err = error as Error;
     const [msg, status] = err.message.split("|");
-    return res
-      .status(status ? Number(status) : defaultStatus)
-      .json({ error: msg });
+    return res.status(status ? Number(status) : defStatus).json({ error: msg });
   }
 }

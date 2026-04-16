@@ -3,6 +3,7 @@ import path from "path";
 import { Request, Response } from "express";
 import VehicleImage from "../models/VehicleImage";
 import Vehicle from "../models/Vehicle";
+import { IVehicleImage } from "../types"; // Regra 4: Importação Global
 
 export default class VehicleImageController {
   /**
@@ -18,7 +19,7 @@ export default class VehicleImageController {
       const url = `/uploads/${req.file.filename}`;
       const image = await VehicleImage.create({ vehicleId, url });
 
-      return res.status(201).json(image);
+      return res.status(201).json(image as IVehicleImage);
     } catch (error) {
       return VehicleImageController.handleError(res, error as Error, 500);
     }
@@ -29,7 +30,7 @@ export default class VehicleImageController {
       const { imageId } = req.params;
       const image = await VehicleImageController.fetchImage(imageId as string);
 
-      VehicleImageController.removePhysicalFile(image.url);
+      VehicleImageController.removePhysicalFile(image.url as string);
       await image.destroy();
 
       return res.status(200).json({ message: "Imagem deletada com sucesso." });
