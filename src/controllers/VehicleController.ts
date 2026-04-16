@@ -40,7 +40,18 @@ export default class VehicleController {
         limit: Number(limit),
         offset,
         order: [["createdAt", "DESC"]],
-        include: VehicleController.getIncludes(),
+        include: [
+          {
+            model: User,
+            as: "user", // ou "User", dependendo de como você definiu a associação no model
+            attributes: ["name", "email"],
+          },
+          {
+            model: VehicleImage,
+            as: "images", // Deve ser exatamente o mesmo nome que você definiu na associação
+            attributes: ["id", "url"],
+          },
+        ],
       });
 
       return res.status(200).json({

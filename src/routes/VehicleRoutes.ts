@@ -1,18 +1,36 @@
 import { Router } from "express";
+import multer from "multer";
+import { multerConfig } from "../config/multer";
 import VehicleController from "../controllers/VehicleController";
-import { authMiddleware } from "../middlewares/authMiddleware"; // <-- Importe aqui
+import VehicleImageController from "../controllers/VehicleImageController";
+import { authMiddleware } from "../middlewares/authMiddleware";
 
 const router = Router();
+const upload = multer(multerConfig);
 
-// Rotas PÚBLICAS (Qualquer um pode ver os carros)
+// === ROTAS PRINCIPAIS DE VEÍCULOS ===
+// PÚBLICAS
 router.get("/", VehicleController.getAll);
 router.get("/:id", VehicleController.getById);
 
-// Rotas PROTEGIDAS (Só quem está logado pode anunciar ou mexer no anúncio)
+// PROTEGIDAS (Apenas utilizadores autenticados)
 router.post("/", authMiddleware, VehicleController.create);
 router.put("/:id", authMiddleware, VehicleController.update);
 router.delete("/:id", authMiddleware, VehicleController.delete);
-// POST ou PATCH para finalizar a venda do veículo
-router.patch("/:id/sell", authMiddleware, VehicleController.sell);
+router.patch("/:id/sell", authMiddleware, VehicleController.sell); // Finalizar venda
+
+// === ROTAS DE IMAGENS DOS VEÍCULOS ===
+// PROTEGIDAS (Apenas utilizadores autenticados)
+router.post(
+  "/:vehicleId/images",
+  authMiddleware,
+  upload.single("image"),
+  VehicleImageController.upload,
+);
+router.delete(
+  "/images/:imageId",
+  authMiddleware,
+  VehicleImageController.delete,
+);
 
 export default router;
