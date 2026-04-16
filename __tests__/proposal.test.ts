@@ -13,6 +13,7 @@ describe("Suite de Testes: Fluxo de Negociação e Venda", () => {
   let tokenComprador: string;
   let veiculoId: string;
   let propostaGanhadoraId: string;
+  let comprador1Id: string;
 
   beforeAll(async () => {
     // 1. FAXINA: Limpa o banco de dados antes de começar para evitar erro de "CPF já cadastrado"
@@ -38,6 +39,7 @@ describe("Suite de Testes: Fluxo de Negociação e Venda", () => {
       password: "Senha@123",
       birthDate: new Date("1990-01-01"),
     });
+    comprador1Id = comprador1.id;
 
     const comprador2 = await User.create({
       name: "Maria Perdedora",
@@ -120,7 +122,7 @@ describe("Suite de Testes: Fluxo de Negociação e Venda", () => {
       });
 
     expect(response.status).toBe(403);
-    expect(response.body.error).toContain("Apenas o proprietário");
+    expect(response.body.error).toContain("Acesso negado");
   });
 
   it("🟢 Deve finalizar a venda, marcar carro como vendido e recusar outras propostas", async () => {
@@ -132,9 +134,8 @@ describe("Suite de Testes: Fluxo de Negociação e Venda", () => {
       .patch(`/vehicles/${veiculoId}/sell`)
       .set("Authorization", `Bearer ${tokenVendedor}`)
       .send({
-        winningProposalId: propostaGanhadoraId,
+        buyerId: comprador1Id, // Certifique-se que é buyerId e não winningProposalId
       });
-
     // 1. Verifica se a rota respondeu com sucesso
     expect(response.status).toBe(200);
     expect(response.body.message).toContain("Venda finalizada com sucesso");

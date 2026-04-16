@@ -22,7 +22,7 @@ describe("Suite de Testes: Cadastro de Usuário (AutoZoom)", () => {
     });
 
     expect(response.status).toBe(403);
-    expect(response.body.error).toContain("18 anos");
+    expect(response.body.error).toContain("Menor de idade");
   });
 
   it("🔴 Deve bloquear cadastro com CPF inválido", async () => {
